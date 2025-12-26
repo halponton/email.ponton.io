@@ -1,0 +1,40 @@
+{
+  "name": "email-ponton-io-infra",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AWS CDK infrastructure for email.ponton.io newsletter platform",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "test": "jest",
+    "cdk": "cdk",
+    "synth": "cdk synth",
+    "synth:dev": "cdk synth --context environment=dev",
+    "synth:prod": "cdk synth --context environment=prod",
+    "diff:dev": "cdk diff --context environment=dev",
+    "diff:prod": "cdk diff --context environment=prod",
+    "deploy:dev": "cdk deploy --all --context environment=dev",
+    "deploy:prod": "cdk deploy --all --context environment=prod --require-approval broadening"
+  },
+  "keywords": [
+    "aws",
+    "cdk",
+    "newsletter",
+    "ses",
+    "email"
+  ],
+  "author": "",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.133",
+    "@types/node": "^20.11.5",
+    "aws-cdk": "^2.125.0",
+    "esbuild": "^0.20.0",
+    "typescript": "~5.3.3"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.125.0",
+    "constructs": "^10.3.0",
+    "source-map-support": "^0.5.21"
+  }
+}

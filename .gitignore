@@ -1,0 +1,45 @@
+# CDK
+*.js
+!jest.config.js
+*.d.ts
+node_modules
+cdk.out
+
+# Compiled JavaScript files
+lib/**/*.js
+lib/**/*.d.ts
+bin/**/*.js
+bin/**/*.d.ts
+
+# TypeScript cache
+*.tsbuildinfo
+
+# IDEs
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets and environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Coverage
+coverage
+.nyc_output
+
+# Build artifacts
+dist
+build

@@ -1,1 +1,9 @@
-{}
+{
+  "hosted-zone:account=796183139346:domainName=ponton.io:region=eu-west-2": {
+    "Id": "/hostedzone/Z04783143NA5HS08ESANR",
+    "Name": "ponton.io."
+  },
+  "acknowledged-issue-numbers": [
+    34892
+  ]
+}

@@ -324,6 +324,10 @@ All Lambda functions have minimal IAM permissions:
 - CloudWatch Logs write access only
 - Additional permissions added per function as needed
 
+### AWS SDK Usage
+
+Lambda handlers should use AWS SDK v3. The Node.js 20 runtime includes v3, and this repo does not assume v2 is available.
+
 ## Monitoring and Logs
 
 ### CloudWatch Logs

@@ -112,9 +112,6 @@ export class StandardLambdaFunction extends Construct {
         target: 'node20',
         format: lambdaNodejs.OutputFormat.ESM,
         mainFields: ['module', 'main'],
-        externalModules: [
-          'aws-sdk', // Excluded for compatibility; AWS SDK v3 available in Node 20 runtime
-        ],
       },
     });
 

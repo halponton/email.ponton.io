@@ -10,13 +10,13 @@ import { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
  * - POST /v1/subscribe
  * - GET /v1/confirm
  * - POST /v1/unsubscribe
- * - GET /v1/track/open/:token
- * - GET /v1/track/click/:token
+ * - GET /v1/track/open/{token}
+ * - GET /v1/track/click/{token}
  * - POST /admin/campaigns
- * - GET /admin/campaigns/:id
- * - POST /admin/campaigns/:id/send
+ * - GET /admin/campaigns/{id}
+ * - POST /admin/campaigns/{id}/send
  * - GET /admin/subscribers
- * - POST /admin/subscribers/:id/suppress
+ * - POST /admin/subscribers/{id}/suppress
  */
 export const handler = async (
   event: APIGatewayProxyEventV2

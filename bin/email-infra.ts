@@ -18,7 +18,7 @@ import { getEnvironmentConfig } from '../lib/config/environments';
  * - All resources environment-scoped
  *
  * Milestone 1: Domains and API Gateway
- * - ACM certificate for api.email.ponton.io
+ * - ACM certificate for environment-scoped API domain
  * - API Gateway HTTP API with custom domain
  * - Route53 alias record
  * - Placeholder Lambda functions
@@ -52,12 +52,12 @@ const apiGatewayStackName = `${config.env}-email-api-gateway`;
  * Certificate Stack
  *
  * Must be deployed first as API Gateway stack depends on it.
- * Creates ACM certificate in us-east-1 for API Gateway custom domain.
+ * Creates ACM certificate in us-east-1 for the API Gateway custom domain.
  */
 const certificateStack = new CertificateStack(app, certificateStackName, {
   env,
   config,
-  description: `ACM certificate for api.email.ponton.io (${config.env})`,
+  description: `ACM certificate for ${config.apiDomain} (${config.env})`,
   stackName: certificateStackName,
 });
 

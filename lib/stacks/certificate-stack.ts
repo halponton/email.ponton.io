@@ -14,7 +14,7 @@ export interface CertificateStackProps extends cdk.StackProps {
 /**
  * ACM Certificate Stack for API Gateway custom domain
  *
- * Creates an SSL/TLS certificate for api.email.ponton.io in us-east-1
+ * Creates an SSL/TLS certificate for the environment-scoped API domain in us-east-1
  * (required for API Gateway custom domains per AWS requirements).
  *
  * The certificate is validated via DNS using the existing Route53 hosted zone.
@@ -40,7 +40,7 @@ export class CertificateStack extends cdk.Stack {
       domainName: config.hostedZoneName,
     });
 
-    // Create ACM certificate for api.email.ponton.io
+    // Create ACM certificate for the environment-scoped API domain
     // Must be in us-east-1 for API Gateway custom domain
     this.certificate = new acm.Certificate(
       this,

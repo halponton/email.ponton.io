@@ -31,15 +31,19 @@ Per **PLATFORM_INVARIANTS.md** section 3:
 - Single AWS account
 - SES sandbox mode in dev
 - All resources environment-scoped (prefixed with `dev-` or `prod-`)
+- Environment-scoped domains: prod uses `api.email.ponton.io`, dev uses `api-dev.email.ponton.io`
 
 ### Current Implementation Status
 
 **Milestone 1: Domains and API Gateway** ✅ (Current)
-- ACM certificate for `api.email.ponton.io`
+- ACM certificates for environment-scoped API domains:
+  - Dev: `api-dev.email.ponton.io`
+  - Prod: `api.email.ponton.io`
 - API Gateway HTTP API with custom domain
-- Route53 alias record
+- Route53 alias records
 - Health check endpoint at `/v1/health`
 - Placeholder routes returning 501 Not Implemented
+- Admin route authorization (placeholder blocking all access until Milestone 5)
 
 **Future Milestones:**
 - Milestone 2: DynamoDB tables and GSIs
@@ -65,13 +69,15 @@ Per **PLATFORM_INVARIANTS.md** section 3:
 
 | Method | Path | Status | Description |
 |--------|------|--------|-------------|
-| POST | `/admin/campaigns` | 🚧 Placeholder | Create campaign |
-| GET | `/admin/campaigns/{id}` | 🚧 Placeholder | Get campaign details |
-| POST | `/admin/campaigns/{id}/send` | 🚧 Placeholder | Send campaign |
-| GET | `/admin/subscribers` | 🚧 Placeholder | List subscribers |
-| POST | `/admin/subscribers/{id}/suppress` | 🚧 Placeholder | Suppress subscriber |
+| POST | `/admin/campaigns` | 🔒 Blocked | Create campaign |
+| GET | `/admin/campaigns/{id}` | 🔒 Blocked | Get campaign details |
+| POST | `/admin/campaigns/{id}/send` | 🔒 Blocked | Send campaign |
+| GET | `/admin/subscribers` | 🔒 Blocked | List subscribers |
+| POST | `/admin/subscribers/{id}/suppress` | 🔒 Blocked | Suppress subscriber |
 
 🚧 = Returns 501 Not Implemented (infrastructure in place, handler pending)
+🔒 = Returns 401 Unauthorized (admin authentication not yet configured - Milestone 5)
+Admin routes are blocked by a deny-all Lambda authorizer (simple response), so API Gateway returns 401 without a JSON body.
 
 ## Prerequisites
 
@@ -114,22 +120,20 @@ Environment configuration is in `lib/config/environments.ts`:
 {
   env: 'dev',
   region: 'us-east-1',
-  domain: 'email.ponton.io',
-  apiDomain: 'api.email.ponton.io',
+  apiDomain: 'api-dev.email.ponton.io',
   sesSandbox: true,
-  logRetentionDays: 180,
   hostedZoneName: 'ponton.io',
+  enableDetailedMonitoring: false,
 }
 
 // Prod environment
 {
   env: 'prod',
   region: 'us-east-1',
-  domain: 'email.ponton.io',
   apiDomain: 'api.email.ponton.io',
   sesSandbox: false,
-  logRetentionDays: 180,
   hostedZoneName: 'ponton.io',
+  enableDetailedMonitoring: true,
 }
 ```
 
@@ -183,7 +187,7 @@ aws cloudformation describe-stacks \
 Key outputs:
 - `CertificateArn`: ACM certificate ARN
 - `ApiUrl`: API Gateway endpoint URL
-- `CustomDomainUrl`: Custom domain URL (https://api.email.ponton.io)
+- `CustomDomainUrl`: Custom domain URL (https://api-dev.email.ponton.io or https://api.email.ponton.io)
 - `HealthCheckUrl`: Health check endpoint URL
 
 ## Testing
@@ -193,10 +197,13 @@ Key outputs:
 After deployment, test the health check:
 
 ```bash
-# Using custom domain (requires DNS propagation)
+# Dev environment - using custom domain (requires DNS propagation)
+curl https://api-dev.email.ponton.io/v1/health
+
+# Prod environment - using custom domain (requires DNS propagation)
 curl https://api.email.ponton.io/v1/health
 
-# Using API Gateway URL (immediate)
+# Using API Gateway URL (immediate, works for both environments)
 curl https://{api-id}.execute-api.us-east-1.amazonaws.com/v1/health
 ```
 
@@ -213,10 +220,10 @@ Expected response:
 
 ### Placeholder Routes
 
-All other routes return 501 Not Implemented:
+Public API routes (except /v1/health) return 501 Not Implemented:
 
 ```bash
-curl -X POST https://api.email.ponton.io/v1/subscribe
+curl -X POST https://api-dev.email.ponton.io/v1/subscribe
 
 # Response:
 # {
@@ -224,6 +231,17 @@ curl -X POST https://api.email.ponton.io/v1/subscribe
 #   "message": "Endpoint POST /v1/subscribe is not yet implemented...",
 #   "timestamp": "2025-12-26T12:00:00.000Z"
 # }
+```
+
+### Admin Routes
+
+All admin routes return 401 Unauthorized (authentication not yet configured):
+
+```bash
+curl -X GET https://api-dev.email.ponton.io/admin/campaigns
+
+# Response: 401 Unauthorized
+# Admin routes are blocked until Cognito implementation in Milestone 5
 ```
 
 ## Project Structure
@@ -256,7 +274,8 @@ email.ponton.io/
 │   │
 │   └── handlers/
 │       ├── health.ts            # Health check handler
-│       └── not-implemented.ts   # Placeholder handler (501)
+│       ├── not-implemented.ts   # Placeholder handler (501)
+│       └── admin-authorizer.ts  # Placeholder admin authorizer (401)
 │
 └── ponton.io_email_service/     # Domain logic (separate repo)
 ```
@@ -311,9 +330,14 @@ All Lambda functions have minimal IAM permissions:
 
 Lambda function logs are retained for **180 days** (6 months) per **PLATFORM_INVARIANTS.md** section 11.
 
-Log groups:
+Log groups (dev environment):
 - `/aws/lambda/dev-email-api-health`
 - `/aws/lambda/dev-email-api-not-implemented`
+- `/aws/lambda/dev-email-api-admin-authorizer`
+
+Log retention:
+- **Dev**: 180 days, DESTROY on stack deletion
+- **Prod**: 180 days, RETAIN on stack deletion (prevents accidental log loss)
 
 ### X-Ray Tracing
 

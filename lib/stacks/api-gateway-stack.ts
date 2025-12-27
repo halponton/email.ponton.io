@@ -1,5 +1,6 @@
 import * as cdk from 'aws-cdk-lib';
 import * as apigatewayv2 from 'aws-cdk-lib/aws-apigatewayv2';
+import * as apigatewayv2Authorizers from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
 import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as route53 from 'aws-cdk-lib/aws-route53';
 import * as route53Targets from 'aws-cdk-lib/aws-route53-targets';
@@ -22,7 +23,7 @@ export interface ApiGatewayStackProps extends cdk.StackProps {
  *
  * Creates:
  * 1. HTTP API Gateway (v2)
- * 2. Custom domain configuration (api.email.ponton.io)
+ * 2. Custom domain configuration (environment-scoped)
  * 3. Route53 alias record
  * 4. Lambda functions for all routes
  * 5. Route definitions for public and admin APIs
@@ -32,18 +33,23 @@ export interface ApiGatewayStackProps extends cdk.StackProps {
  *   - POST /v1/subscribe - Subscribe to newsletter
  *   - GET /v1/confirm - Confirm subscription via token
  *   - POST /v1/unsubscribe - Unsubscribe via token
- *   - GET /v1/track/open/:token - Track email opens
- *   - GET /v1/track/click/:token - Track link clicks and redirect
+ *   - GET /v1/track/open/{token} - Track email opens
+ *   - GET /v1/track/click/{token} - Track link clicks and redirect
  *   - GET /v1/health - Health check (200 OK)
  *
- * - Admin API:
+ * - Admin API (requires authentication - currently blocked):
  *   - POST /admin/campaigns - Create campaign
- *   - GET /admin/campaigns/:id - Get campaign details
- *   - POST /admin/campaigns/:id/send - Send campaign
+ *   - GET /admin/campaigns/{id} - Get campaign details
+ *   - POST /admin/campaigns/{id}/send - Send campaign
  *   - GET /admin/subscribers - List subscribers
- *   - POST /admin/subscribers/:id/suppress - Suppress subscriber
+ *   - POST /admin/subscribers/{id}/suppress - Suppress subscriber
  *
- * Milestone 1: All routes except /v1/health return 501 Not Implemented
+ * Milestone 1:
+ * - Public routes except /v1/health return 501 Not Implemented
+ * - Admin routes are blocked by a placeholder authorizer (401 Unauthorized)
+ *
+ * SECURITY: All /admin/* routes are protected by a placeholder Lambda authorizer
+ * that returns 401 Unauthorized until Cognito is implemented in Milestone 5.
  */
 export class ApiGatewayStack extends cdk.Stack {
   /** The HTTP API */
@@ -57,6 +63,12 @@ export class ApiGatewayStack extends cdk.Stack {
 
   /** Not implemented placeholder Lambda function */
   public readonly notImplementedFunction: StandardLambdaFunction;
+
+  /** Admin authorizer Lambda function */
+  public readonly adminAuthorizerFunction: StandardLambdaFunction;
+
+  /** Admin route authorizer */
+  public readonly adminAuthorizer: apigatewayv2Authorizers.HttpLambdaAuthorizer;
 
   constructor(scope: Construct, id: string, props: ApiGatewayStackProps) {
     super(scope, id, props);
@@ -86,6 +98,21 @@ export class ApiGatewayStack extends cdk.Stack {
       }
     );
 
+    // Create admin authorizer function
+    // TODO (Milestone 5): Replace with Cognito JWT authorizer
+    this.adminAuthorizerFunction = new StandardLambdaFunction(
+      this,
+      'AdminAuthorizerFunction',
+      {
+        config,
+        functionName: 'email-api-admin-authorizer',
+        handlerFileName: 'admin-authorizer',
+        description: 'TEMPORARY: Placeholder authorizer that blocks all admin access until Cognito (Milestone 5)',
+        memorySize: 128,
+        timeout: 10,
+      }
+    );
+
     // Create HTTP API
     this.httpApi = new apigatewayv2.HttpApi(
       this,
@@ -101,8 +128,7 @@ export class ApiGatewayStack extends cdk.Stack {
           allowMethods: [
             apigatewayv2.CorsHttpMethod.GET,
             apigatewayv2.CorsHttpMethod.POST,
-            apigatewayv2.CorsHttpMethod.PUT,
-            apigatewayv2.CorsHttpMethod.DELETE,
+            // PUT and DELETE removed - add back when needed for admin features
           ],
           allowHeaders: ['Content-Type', 'Authorization'],
           maxAge: cdk.Duration.hours(1),
@@ -143,6 +169,23 @@ export class ApiGatewayStack extends cdk.Stack {
         )
       ),
     });
+
+    // Create Lambda authorizer for admin routes
+    // TODO (Milestone 5): Replace this with Cognito User Pool authorizer
+    // This is a TEMPORARY security measure that blocks all admin access
+    this.adminAuthorizer = new apigatewayv2Authorizers.HttpLambdaAuthorizer(
+      'AdminAuthorizer',
+      this.adminAuthorizerFunction.function,
+      {
+        authorizerName: envResourceName(config.env, 'admin-authorizer'),
+        responseTypes: [apigatewayv2Authorizers.HttpLambdaResponseType.SIMPLE],
+        resultsCacheTtl: cdk.Duration.seconds(0),
+        // Deny-all authorizer should not cache responses
+        // TODO (Milestone 5): When implementing Cognito, add:
+        //   identitySource: ['$request.header.Authorization'],
+        //   resultsCacheTtl: cdk.Duration.minutes(5),
+      }
+    );
 
     // Define routes
     const routes: RouteDefinition[] = [
@@ -189,23 +232,27 @@ export class ApiGatewayStack extends cdk.Stack {
       },
 
       // Admin API - Campaign management (Milestone 5+)
+      // All admin routes require authentication (currently blocked by placeholder authorizer)
       {
         method: 'POST',
         path: '/admin/campaigns',
         handler: this.notImplementedFunction.function,
         description: 'Create campaign',
+        authorizer: this.adminAuthorizer,
       },
       {
         method: 'GET',
         path: '/admin/campaigns/{id}',
         handler: this.notImplementedFunction.function,
         description: 'Get campaign details',
+        authorizer: this.adminAuthorizer,
       },
       {
         method: 'POST',
         path: '/admin/campaigns/{id}/send',
         handler: this.notImplementedFunction.function,
         description: 'Send campaign',
+        authorizer: this.adminAuthorizer,
       },
 
       // Admin API - Subscriber management (Milestone 5+)
@@ -214,12 +261,14 @@ export class ApiGatewayStack extends cdk.Stack {
         path: '/admin/subscribers',
         handler: this.notImplementedFunction.function,
         description: 'List subscribers',
+        authorizer: this.adminAuthorizer,
       },
       {
         method: 'POST',
         path: '/admin/subscribers/{id}/suppress',
         handler: this.notImplementedFunction.function,
         description: 'Suppress subscriber',
+        authorizer: this.adminAuthorizer,
       },
     ];
 

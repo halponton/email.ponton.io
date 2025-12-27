@@ -18,6 +18,9 @@ export interface RouteDefinition {
 
   /** Optional route description */
   readonly description?: string;
+
+  /** Optional authorizer for this route */
+  readonly authorizer?: apigatewayv2.IHttpRouteAuthorizer;
 }
 
 /**
@@ -70,6 +73,7 @@ export class ApiRoutes extends Construct {
           apigatewayv2.HttpMethod[routeDef.method]
         ),
         integration,
+        authorizer: routeDef.authorizer,
       });
 
       return route;

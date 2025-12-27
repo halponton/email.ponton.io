@@ -6,7 +6,6 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc -w",
-    "test": "jest",
     "cdk": "cdk",
     "synth": "cdk synth",
     "synth:dev": "cdk synth --context environment=dev",
@@ -30,6 +29,7 @@
     "@types/node": "^20.11.5",
     "aws-cdk": "^2.125.0",
     "esbuild": "^0.20.0",
+    "ts-node": "^10.9.2",
     "typescript": "~5.3.3"
   },
   "dependencies": {

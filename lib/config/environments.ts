@@ -15,17 +15,11 @@ export interface EnvironmentConfig {
   /** AWS region for deployment */
   readonly region: string;
 
-  /** Base domain for the platform */
-  readonly domain: string;
-
-  /** API subdomain (e.g., api.email.ponton.io) */
+  /** API subdomain (e.g., api-dev.email.ponton.io, api.email.ponton.io) */
   readonly apiDomain: string;
 
   /** Whether SES is in sandbox mode (dev only) */
   readonly sesSandbox: boolean;
-
-  /** CloudWatch log retention in days */
-  readonly logRetentionDays: number;
 
   /** Route53 hosted zone name (parent domain) */
   readonly hostedZoneName: string;
@@ -39,11 +33,9 @@ export interface EnvironmentConfig {
  */
 export const DEV_CONFIG: EnvironmentConfig = {
   env: 'dev',
-  region: 'us-east-1',
-  domain: 'email.ponton.io',
-  apiDomain: 'api.email.ponton.io',
+  region: 'eu-west-2',
+  apiDomain: 'api-dev.email.ponton.io',
   sesSandbox: true,
-  logRetentionDays: 180, // 6 months per PLATFORM_INVARIANTS.md section 11
   hostedZoneName: 'ponton.io',
   enableDetailedMonitoring: false,
 };
@@ -53,11 +45,9 @@ export const DEV_CONFIG: EnvironmentConfig = {
  */
 export const PROD_CONFIG: EnvironmentConfig = {
   env: 'prod',
-  region: 'us-east-1',
-  domain: 'email.ponton.io',
+  region: 'eu-west-2',
   apiDomain: 'api.email.ponton.io',
   sesSandbox: false,
-  logRetentionDays: 180, // 6 months per PLATFORM_INVARIANTS.md section 11
   hostedZoneName: 'ponton.io',
   enableDetailedMonitoring: true,
 };

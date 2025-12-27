@@ -77,7 +77,9 @@ export class StandardLambdaFunction extends Construct {
       {
         logGroupName: `/aws/lambda/${envResourceName(config.env, functionName)}`,
         retention: logs.RetentionDays.SIX_MONTHS,
-        removalPolicy: cdk.RemovalPolicy.DESTROY, // Safe for dev/staging; consider RETAIN for prod
+        removalPolicy: config.env === 'prod'
+          ? cdk.RemovalPolicy.RETAIN
+          : cdk.RemovalPolicy.DESTROY,
       }
     );
 
@@ -111,7 +113,7 @@ export class StandardLambdaFunction extends Construct {
         format: lambdaNodejs.OutputFormat.ESM,
         mainFields: ['module', 'main'],
         externalModules: [
-          'aws-sdk', // Use AWS SDK v3 from Lambda runtime
+          'aws-sdk', // Excluded for compatibility; AWS SDK v3 available in Node 20 runtime
         ],
       },
     });

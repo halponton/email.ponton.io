@@ -59,6 +59,8 @@ Must not contain:
 - Single AWS account.
 - SES sandbox in dev.
 - Distinct secrets and parameters per environment.
+- Environment-scoped domains: prod uses the canonical API domain, dev uses a prefixed subdomain
+  (e.g., prod `api.email.ponton.io`, dev `api-dev.email.ponton.io`).
 
 ## 4. Secrets and configuration
 - No hardcoded secrets, ever.

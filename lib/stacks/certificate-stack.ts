@@ -14,7 +14,7 @@ export interface CertificateStackProps extends cdk.StackProps {
 /**
  * ACM Certificate Stack for API Gateway custom domain
  *
- * Creates an SSL/TLS certificate for the environment-scoped API domain in us-east-1
+ * Creates an SSL/TLS certificate for the environment-scoped API domain in eu-west-2
  * (required for API Gateway custom domains per AWS requirements).
  *
  * The certificate is validated via DNS using the existing Route53 hosted zone.
@@ -41,7 +41,7 @@ export class CertificateStack extends cdk.Stack {
     });
 
     // Create ACM certificate for the environment-scoped API domain
-    // Must be in us-east-1 for API Gateway custom domain
+    // Must be in the same region as the API Gateway (eu-west-2 in this repo)
     this.certificate = new acm.Certificate(
       this,
       envResourceName(config.env, 'ApiCertificate'),

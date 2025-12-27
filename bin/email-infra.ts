@@ -52,7 +52,7 @@ const apiGatewayStackName = `${config.env}-email-api-gateway`;
  * Certificate Stack
  *
  * Must be deployed first as API Gateway stack depends on it.
- * Creates ACM certificate in us-east-1 for the API Gateway custom domain.
+ * Creates ACM certificate in eu-west-2 for the API Gateway custom domain.
  */
 const certificateStack = new CertificateStack(app, certificateStackName, {
   env,

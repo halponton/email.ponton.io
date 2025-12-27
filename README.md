@@ -119,7 +119,7 @@ Environment configuration is in `lib/config/environments.ts`:
 // Dev environment
 {
   env: 'dev',
-  region: 'us-east-1',
+  region: 'eu-west-2',
   apiDomain: 'api-dev.email.ponton.io',
   sesSandbox: true,
   hostedZoneName: 'ponton.io',
@@ -129,7 +129,7 @@ Environment configuration is in `lib/config/environments.ts`:
 // Prod environment
 {
   env: 'prod',
-  region: 'us-east-1',
+  region: 'eu-west-2',
   apiDomain: 'api.email.ponton.io',
   sesSandbox: false,
   hostedZoneName: 'ponton.io',
@@ -204,7 +204,7 @@ curl https://api-dev.email.ponton.io/v1/health
 curl https://api.email.ponton.io/v1/health
 
 # Using API Gateway URL (immediate, works for both environments)
-curl https://{api-id}.execute-api.us-east-1.amazonaws.com/v1/health
+curl https://{api-id}.execute-api.eu-west-2.amazonaws.com/v1/health
 ```
 
 Expected response:
@@ -294,7 +294,7 @@ The certificate stack must be deployed first as the API Gateway stack depends on
 Lambda functions receive standard environment variables:
 
 - `ENVIRONMENT`: `dev` or `prod`
-- `REGION`: AWS region (us-east-1)
+- `REGION`: AWS region (eu-west-2)
 - `LOG_LEVEL`: `DEBUG` (dev) or `INFO` (prod)
 
 ## Security Considerations

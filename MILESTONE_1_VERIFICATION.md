@@ -158,7 +158,7 @@ npm run synth:dev
 
 All requirements from Milestone 1 architecture plan:
 
-- [x] ACM Certificate for environment-scoped API domain (us-east-1) ✅
+- [x] ACM Certificate for environment-scoped API domain (eu-west-2) ✅
 - [x] API Gateway HTTP API with custom domain ✅
 - [x] Route53 alias record pointing to API Gateway ✅
 - [x] Route structure defined (public /v1/*, admin /admin/*) ✅

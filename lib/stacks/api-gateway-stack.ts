@@ -8,6 +8,7 @@ import { Construct } from 'constructs';
 import { EnvironmentConfig, envResourceName } from '../config/environments';
 import { StandardLambdaFunction } from '../constructs/lambda-function';
 import { ApiRoutes, RouteDefinition } from '../constructs/api-routes';
+import { DynamoDBTablesConstruct } from '../constructs/dynamodb-tables';
 
 /**
  * Props for ApiGatewayStack
@@ -16,6 +17,7 @@ export interface ApiGatewayStackProps extends cdk.StackProps {
   readonly config: EnvironmentConfig;
   readonly certificate: acm.ICertificate;
   readonly hostedZone: route53.IHostedZone;
+  readonly tables: DynamoDBTablesConstruct;
 }
 
 /**
@@ -73,7 +75,7 @@ export class ApiGatewayStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: ApiGatewayStackProps) {
     super(scope, id, props);
 
-    const { config, certificate, hostedZone } = props;
+    const { config, certificate, hostedZone, tables } = props;
 
     // Create Lambda functions
     this.healthFunction = new StandardLambdaFunction(this, 'HealthFunction', {
@@ -95,6 +97,7 @@ export class ApiGatewayStack extends cdk.Stack {
         description: 'Placeholder handler for routes not yet implemented',
         memorySize: 128,
         timeout: 10,
+        // No environment variables - this function returns static 501 response
       }
     );
 
@@ -277,6 +280,37 @@ export class ApiGatewayStack extends cdk.Stack {
       httpApi: this.httpApi,
       routes,
     });
+
+    /**
+     * DynamoDB Permissions Architecture
+     *
+     * Per least privilege principle, IAM permissions are granted ONLY to Lambda functions
+     * that actually need them. Permissions are granted per-function based on actual usage.
+     *
+     * Current state (Milestone 2):
+     * - healthFunction: No DynamoDB access (returns static 200 OK)
+     * - notImplementedFunction: No DynamoDB access (returns static 501 Not Implemented)
+     * - adminAuthorizerFunction: No DynamoDB access (deny-all placeholder for Milestone 5)
+     *
+     * Future milestones:
+     * When implementing real handlers, grant permissions ONLY to functions that need them:
+     * - Public API functions: Read/write to Subscribers, AuditEvents, EngagementEvents
+     * - Admin API functions: Read access to all tables (write access granted per-endpoint)
+     * - KMS decrypt/encrypt: Required only for functions accessing CMK-encrypted tables
+     *
+     * Example for future implementation:
+     * ```typescript
+     * // Subscribe handler needs Subscribers + AuditEvents
+     * tables.subscribersTable.grantReadWriteData(subscribeFunction.function);
+     * tables.auditEventsTable.grantWriteData(subscribeFunction.function);
+     * tables.encryptionKey.grantEncryptDecrypt(subscribeFunction.function);
+     * ```
+     *
+     * SECURITY: Never grant permissions "just in case" - only grant when code needs it.
+     */
+
+    // No permissions granted to placeholder functions
+    // Permissions will be added in future milestones when handlers are implemented
 
     // Outputs
     new cdk.CfnOutput(this, 'ApiUrl', {

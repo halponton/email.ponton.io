@@ -138,6 +138,8 @@ export class DynamoDBTablesConstruct extends Construct {
       })
     );
 
+/* Remove for the moment as not needed - TODO: Validate this after project completion
+
     // Explicitly deny access from external accounts
     // This prevents accidental key policy modifications that could allow cross-account access
     this.encryptionKey.addToResourcePolicy(
@@ -154,6 +156,8 @@ export class DynamoDBTablesConstruct extends Construct {
         },
       })
     );
+
+*/
 
     /**
      * Table 1: Subscribers
@@ -364,7 +368,7 @@ export class DynamoDBTablesConstruct extends Construct {
      * Correct implementation example (TypeScript):
      * ```typescript
      * const now = Date.now(); // milliseconds
-     * const sixMonthsInSeconds = 6 * 30 * 24 * 60 * 60; // 15552000 seconds
+     * const retentionDaysInSeconds = 180 * 24 * 60 * 60; // 180 days
      *
      * const engagementEvent = {
      *   eventId: ulid(),
@@ -372,7 +376,7 @@ export class DynamoDBTablesConstruct extends Construct {
      *   campaignId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
      *   eventType: 'OPEN',
      *   timestamp: now, // milliseconds for sorting
-     *   expiresAt: Math.floor(now / 1000) + sixMonthsInSeconds, // SECONDS for TTL
+     *   expiresAt: Math.floor(now / 1000) + retentionDaysInSeconds, // SECONDS for TTL
      *   metadata: { userAgent: '...', ip: '...' }
      * };
      * ```
@@ -380,10 +384,10 @@ export class DynamoDBTablesConstruct extends Construct {
      * Common mistake to avoid:
      * ```typescript
      * // WRONG - This will expire immediately or never expire
-     * expiresAt: now + sixMonthsInSeconds // milliseconds + seconds = wrong!
+     * expiresAt: now + retentionDaysInSeconds // milliseconds + seconds = wrong!
      *
      * // CORRECT - Convert to seconds first, then add
-     * expiresAt: Math.floor(now / 1000) + sixMonthsInSeconds
+     * expiresAt: Math.floor(now / 1000) + retentionDaysInSeconds
      * ```
      *
      * Domain layer contract:

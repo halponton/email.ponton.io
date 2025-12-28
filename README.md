@@ -220,6 +220,16 @@ Key outputs:
 
 ## Testing
 
+### Infrastructure Unit Tests
+
+Run CDK assertions tests for DynamoDB table configuration:
+
+```bash
+npm test
+```
+
+These tests validate table counts, GSIs, TTL configuration, deletion protection, and PITR settings.
+
 ### Health Check Endpoint
 
 After deployment, test the health check:

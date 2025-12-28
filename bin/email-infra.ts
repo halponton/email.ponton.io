@@ -2,6 +2,7 @@
 import 'source-map-support/register';
 import * as cdk from 'aws-cdk-lib';
 import { CertificateStack } from '../lib/stacks/certificate-stack';
+import { DynamoDBStack } from '../lib/stacks/dynamodb-stack';
 import { ApiGatewayStack } from '../lib/stacks/api-gateway-stack';
 import { getEnvironmentConfig } from '../lib/config/environments';
 
@@ -22,6 +23,12 @@ import { getEnvironmentConfig } from '../lib/config/environments';
  * - API Gateway HTTP API with custom domain
  * - Route53 alias record
  * - Placeholder Lambda functions
+ *
+ * Milestone 2: DynamoDB Tables and GSIs
+ * - DynamoDB tables for subscribers, campaigns, deliveries, audit events, engagement events
+ * - Global Secondary Indexes for efficient queries
+ * - Customer Managed Keys for encryption at rest
+ * - Point-in-Time Recovery and deletion protection for prod
  */
 
 const app = new cdk.App();
@@ -46,6 +53,7 @@ const env = {
 
 // Stack naming convention: {env}-email-{stack-name}
 const certificateStackName = `${config.env}-email-certificate`;
+const dynamodbStackName = `${config.env}-email-dynamodb`;
 const apiGatewayStackName = `${config.env}-email-api-gateway`;
 
 /**
@@ -62,9 +70,23 @@ const certificateStack = new CertificateStack(app, certificateStackName, {
 });
 
 /**
+ * DynamoDB Stack
+ *
+ * Creates all DynamoDB tables and GSIs.
+ * Independent of other stacks, can be deployed in parallel with Certificate Stack.
+ */
+const dynamodbStack = new DynamoDBStack(app, dynamodbStackName, {
+  env,
+  config,
+  description: `DynamoDB tables and GSIs for email.ponton.io (${config.env})`,
+  stackName: dynamodbStackName,
+});
+
+/**
  * API Gateway Stack
  *
  * Depends on Certificate Stack for ACM certificate and Route53 hosted zone.
+ * Depends on DynamoDB Stack for table references and IAM permissions.
  * Creates HTTP API with custom domain and all routes.
  */
 const apiGatewayStack = new ApiGatewayStack(app, apiGatewayStackName, {
@@ -72,12 +94,14 @@ const apiGatewayStack = new ApiGatewayStack(app, apiGatewayStackName, {
   config,
   certificate: certificateStack.certificate,
   hostedZone: certificateStack.hostedZone,
+  tables: dynamodbStack.tables,
   description: `API Gateway and Lambda functions for email.ponton.io (${config.env})`,
   stackName: apiGatewayStackName,
 });
 
-// Explicit dependency to ensure certificate is created first
+// Explicit dependencies
 apiGatewayStack.addDependency(certificateStack);
+apiGatewayStack.addDependency(dynamodbStack);
 
 // Add global tags
 cdk.Tags.of(app).add('Project', 'email.ponton.io');

@@ -35,7 +35,7 @@ Per **PLATFORM_INVARIANTS.md** section 3:
 
 ### Current Implementation Status
 
-**Milestone 1: Domains and API Gateway** ✅ (Current)
+**Milestone 1: Domains and API Gateway** ✅ Complete
 - ACM certificates for environment-scoped API domains:
   - Dev: `api-dev.email.ponton.io`
   - Prod: `api.email.ponton.io`
@@ -45,8 +45,20 @@ Per **PLATFORM_INVARIANTS.md** section 3:
 - Placeholder routes returning 501 Not Implemented
 - Admin route authorization (placeholder blocking all access until Milestone 5)
 
+**Milestone 2: DynamoDB Tables and GSIs** ✅ Complete
+- 5 DynamoDB tables with all GSIs:
+  - Subscribers (4 GSIs: EmailHashIndex, ConfirmTokenIndex, UnsubscribeTokenIndex, StateIndex)
+  - AuditEvents (1 GSI: SubscriberEventsIndex)
+  - EngagementEvents (2 GSIs: SubscriberEngagementIndex, CampaignEngagementIndex) with 6-month TTL
+  - Campaigns (1 GSI: StatusIndex)
+  - Deliveries (3 GSIs: CampaignDeliveriesIndex, SubscriberDeliveriesIndex, StatusIndex)
+- Customer Managed Keys (CMK) for encryption at rest (Subscribers, AuditEvents, Campaigns, Deliveries)
+- Point-in-Time Recovery enabled for prod tables
+- Deletion protection enabled for prod tables
+- IAM permissions for handler functions (placeholders currently have no DynamoDB access; permissions added with real handlers)
+- Table-name environment variables for handler functions (placeholders currently omit these; added with real handlers)
+
 **Future Milestones:**
-- Milestone 2: DynamoDB tables and GSIs
 - Milestone 3: Secrets Manager and SSM
 - Milestone 4: SES configuration
 - Milestone 5: Cognito for admin APIs
@@ -97,6 +109,8 @@ The deploying IAM user/role needs permissions for:
 - Route53 (DNS records)
 - IAM (role creation for Lambda)
 - CloudWatch Logs (log group management)
+- DynamoDB (table and GSI management)
+- KMS (key creation and management for DynamoDB encryption)
 
 ## Installation
 
@@ -124,6 +138,10 @@ Environment configuration is in `lib/config/environments.ts`:
   sesSandbox: true,
   hostedZoneName: 'ponton.io',
   enableDetailedMonitoring: false,
+  dynamodb: {
+    enablePointInTimeRecovery: false,  // Cost optimization
+    enableDeletionProtection: false,   // Development flexibility
+  },
 }
 
 // Prod environment
@@ -134,6 +152,10 @@ Environment configuration is in `lib/config/environments.ts`:
   sesSandbox: false,
   hostedZoneName: 'ponton.io',
   enableDetailedMonitoring: true,
+  dynamodb: {
+    enablePointInTimeRecovery: true,   // Data protection
+    enableDeletionProtection: true,    // Prevent accidental deletion
+  },
 }
 ```
 
@@ -189,6 +211,12 @@ Key outputs:
 - `ApiUrl`: API Gateway endpoint URL
 - `CustomDomainUrl`: Custom domain URL (https://api-dev.email.ponton.io or https://api.email.ponton.io)
 - `HealthCheckUrl`: Health check endpoint URL
+- `SubscribersTableName`, `SubscribersTableArn`: Subscribers table details
+- `AuditEventsTableName`, `AuditEventsTableArn`: AuditEvents table details
+- `EngagementEventsTableName`, `EngagementEventsTableArn`: EngagementEvents table details
+- `CampaignsTableName`, `CampaignsTableArn`: Campaigns table details
+- `DeliveriesTableName`, `DeliveriesTableArn`: Deliveries table details
+- `EncryptionKeyId`, `EncryptionKeyArn`: KMS key for DynamoDB encryption
 
 ## Testing
 
@@ -266,11 +294,13 @@ email.ponton.io/
 │   │
 │   ├── stacks/
 │   │   ├── certificate-stack.ts # ACM certificate stack
+│   │   ├── dynamodb-stack.ts    # DynamoDB tables stack
 │   │   └── api-gateway-stack.ts # API Gateway and routes stack
 │   │
 │   ├── constructs/
 │   │   ├── lambda-function.ts   # Standardized Lambda construct
-│   │   └── api-routes.ts        # API Gateway routes construct
+│   │   ├── api-routes.ts        # API Gateway routes construct
+│   │   └── dynamodb-tables.ts   # DynamoDB tables construct
 │   │
 │   └── handlers/
 │       ├── health.ts            # Health check handler
@@ -283,11 +313,16 @@ email.ponton.io/
 ## Stack Dependencies
 
 ```
-dev-email-certificate
-  └─> dev-email-api-gateway
+dev-email-certificate ──┐
+                        ├──> dev-email-api-gateway
+dev-email-dynamodb ─────┘
 ```
 
-The certificate stack must be deployed first as the API Gateway stack depends on the ACM certificate.
+The API Gateway stack depends on:
+- Certificate stack (for ACM certificate and Route53 hosted zone)
+- DynamoDB stack (for table references and IAM permissions)
+
+Certificate and DynamoDB stacks can be deployed in parallel.
 
 ## Environment Variables
 
@@ -296,6 +331,79 @@ Lambda functions receive standard environment variables:
 - `ENVIRONMENT`: `dev` or `prod`
 - `REGION`: AWS region (eu-west-2)
 - `LOG_LEVEL`: `DEBUG` (dev) or `INFO` (prod)
+
+Planned DynamoDB table name variables (for handler functions; placeholder Lambdas do not include these yet):
+
+- `SUBSCRIBERS_TABLE`: Subscribers table name
+- `AUDIT_EVENTS_TABLE`: AuditEvents table name
+- `ENGAGEMENT_EVENTS_TABLE`: EngagementEvents table name
+- `CAMPAIGNS_TABLE`: Campaigns table name
+- `DELIVERIES_TABLE`: Deliveries table name
+
+## DynamoDB Tables
+
+### Data Model
+
+The platform uses 5 DynamoDB tables aligned with **PLATFORM_INVARIANTS.md** data retention classes:
+
+**Business Records (Retained Indefinitely):**
+
+1. **Subscribers** - Subscriber lifecycle and PII
+   - Primary Key: `subscriberId` (ULID)
+   - GSIs: EmailHashIndex, ConfirmTokenIndex, UnsubscribeTokenIndex, StateIndex
+   - Encryption: Customer Managed Key (CMK)
+   - PITR: Enabled in prod
+   - Critical: Plaintext email removed on transition to UNSUBSCRIBED/SUPPRESSED per platform invariants section 10
+
+2. **AuditEvents** - Immutable audit trail
+   - Primary Key: `eventId` (ULID)
+   - GSI: SubscriberEventsIndex
+   - Encryption: Customer Managed Key (CMK)
+   - PITR: Enabled in prod
+
+3. **Campaigns** - Campaign metadata and content
+   - Primary Key: `campaignId` (ULID)
+   - GSI: StatusIndex
+   - Encryption: Customer Managed Key (CMK)
+   - PITR: Enabled in prod
+
+4. **Deliveries** - Individual delivery records
+   - Primary Key: `deliveryId` (ULID)
+   - GSIs: CampaignDeliveriesIndex, SubscriberDeliveriesIndex, StatusIndex
+   - Encryption: Customer Managed Key (CMK)
+   - PITR: Enabled in prod
+
+**Operational Telemetry (6-Month Retention):**
+
+5. **EngagementEvents** - Click/open tracking events
+   - Primary Key: `eventId` (ULID)
+   - GSIs: SubscriberEngagementIndex, CampaignEngagementIndex
+   - Encryption: AWS Managed Key
+   - TTL: Enabled on `expiresAt` attribute (6 months)
+   - PITR: Disabled (operational data)
+   - Deletion protection: Enabled in prod; disabled in dev
+
+### Security Architecture
+
+**Encryption at Rest:**
+- Subscribers, AuditEvents, Campaigns, Deliveries: Customer Managed Key (CMK) with automatic key rotation
+- EngagementEvents: AWS Managed Key (operational telemetry, not business records)
+
+**GSI Security - NO Plaintext PII:**
+- Email lookups use `emailNormalizedHash` (HMAC-SHA256) - NOT plaintext email
+- Token GSIs (ConfirmTokenIndex, UnsubscribeTokenIndex) use KEYS_ONLY projection
+- State-based GSIs use KEYS_ONLY projection to prevent PII exposure in scans
+
+**Data Protection:**
+- Point-in-Time Recovery (PITR) enabled for prod business records
+- Deletion protection enabled for prod tables
+- Dev tables: PITR and deletion protection disabled for cost optimization and flexibility
+
+**Email Hashing Strategy:**
+- The domain layer (ponton.io_email_service) is responsible for computing `emailNormalizedHash`
+- Hash algorithm: HMAC-SHA256 with secret key (prevents rainbow table attacks)
+- Hash is deterministic for duplicate prevention but requires secret key
+- Infrastructure layer defines schema; domain layer owns hashing logic
 
 ## Security Considerations
 
@@ -399,30 +507,24 @@ cdk destroy --all --context environment=prod
 
 ## Next Steps
 
-After Milestone 1 completion:
+After Milestone 2 completion:
 
-1. **Milestone 2**: Implement DynamoDB tables and GSIs
-   - Subscribers table
-   - Campaigns table
-   - Delivery records table
-   - Engagement events table
-
-2. **Milestone 3**: Configure Secrets Manager and SSM
-   - HMAC signing keys
+1. **Milestone 3**: Configure Secrets Manager and SSM
+   - HMAC signing keys for email hashing
    - SES configuration parameters
 
-3. **Milestone 4**: Set up SES configuration
+2. **Milestone 4**: Set up SES configuration
    - Verify `email.ponton.io` domain
    - Configure SNS topics for bounce/complaint handling
    - Set up configuration sets
 
-4. **Milestone 5**: Implement Cognito
+3. **Milestone 5**: Implement Cognito
    - Admin user pool
    - API Gateway JWT authorizers
 
-5. **Milestone 6**: Observability and retention
+4. **Milestone 6**: Observability and retention
    - CloudWatch dashboards
-   - Engagement event cleanup Lambda (6-month TTL)
+   - Monitoring alarms for table metrics
 
 ## Contributing
 

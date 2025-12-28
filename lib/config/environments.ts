@@ -26,6 +26,23 @@ export interface EnvironmentConfig {
 
   /** Whether to enable detailed monitoring */
   readonly enableDetailedMonitoring: boolean;
+
+  /**
+   * DynamoDB configuration
+   */
+  readonly dynamodb: {
+    /**
+     * Whether to enable Point-in-Time Recovery (PITR)
+     * Recommended: true for prod (data protection), false for dev (cost optimization)
+     */
+    readonly enablePointInTimeRecovery: boolean;
+
+    /**
+     * Whether to enable deletion protection
+     * Recommended: true for prod (prevent accidental deletion), false for dev (development flexibility)
+     */
+    readonly enableDeletionProtection: boolean;
+  };
 }
 
 /**
@@ -38,6 +55,10 @@ export const DEV_CONFIG: EnvironmentConfig = {
   sesSandbox: true,
   hostedZoneName: 'ponton.io',
   enableDetailedMonitoring: false,
+  dynamodb: {
+    enablePointInTimeRecovery: false, // Cost optimization for dev
+    enableDeletionProtection: false, // Development flexibility
+  },
 };
 
 /**
@@ -50,6 +71,10 @@ export const PROD_CONFIG: EnvironmentConfig = {
   sesSandbox: false,
   hostedZoneName: 'ponton.io',
   enableDetailedMonitoring: true,
+  dynamodb: {
+    enablePointInTimeRecovery: true, // Data protection for prod
+    enableDeletionProtection: true, // Prevent accidental deletion
+  },
 };
 
 /**

@@ -172,23 +172,20 @@ For Windows, use Git Bash or WSL.
   # Expected: No errors
   ```
 
-- [ ] CDK synthesis successful:
+- [ ] CDK synthesis successful (dev only for now):
   ```bash
   npm run synth:dev
-  npm run synth:prod
   # Expected: Successfully synthesized to cdk.out
   ```
+  Note: Run `npm run synth:prod` when you're ready for prod.
 
 ### CloudFormation Template Review
 
-- [ ] Review synthesized templates:
+- [ ] Review synthesized template (dev):
   ```bash
-  # Dev environment
   cat cdk.out/dev-email-secrets.template.json | jq '.Resources | keys'
-
-  # Prod environment
-  cat cdk.out/prod-email-secrets.template.json | jq '.Resources | keys'
   ```
+  Note: Review the prod template later when you're ready for prod.
 
 - [ ] Verify expected resources (should see 11 resources):
   - 2 Secrets Manager Secrets
@@ -200,7 +197,10 @@ For Windows, use Git Bash or WSL.
 
 - [ ] Verify no hardcoded secrets:
   ```bash
-  rg -n "unsafePlainText|SecretString" lib/constructs/secrets.ts
+  rg -n "\\bunsafePlainText\\b" lib/constructs/secrets.ts
+  # Expected: No matches
+
+  rg -n "\\bSecretString\\b" lib/constructs/secrets.ts
   # Expected: No matches
 
   rg -n "BEGIN RSA" lib/ test/
@@ -211,10 +211,8 @@ For Windows, use Git Bash or WSL.
   ```bash
   # Dev: Should be "Delete"
   jq '.Resources[].DeletionPolicy' cdk.out/dev-email-secrets.template.json | sort -u
-
-  # Prod: Should be "Retain"
-  jq '.Resources[].DeletionPolicy' cdk.out/prod-email-secrets.template.json | sort -u
   ```
+  Note: Check prod removal policies later after running `npm run synth:prod`.
 
 ---
 
@@ -232,7 +230,8 @@ export AWS_DEFAULT_REGION=eu-west-2
 
 #### 1.2 Review Deployment Plan
 ```bash
-npm run diff:dev
+npx cdk diff dev-email-secrets --context environment=dev
+npx cdk diff dev-email-api-gateway --context environment=dev
 ```
 
 Review the output carefully. You should see:
@@ -246,7 +245,7 @@ Review the output carefully. You should see:
 
 #### 1.3 Deploy Dev Secrets Stack
 ```bash
-npm run deploy:dev -- dev-email-secrets
+npx cdk deploy dev-email-secrets --context environment=dev
 ```
 
 Expected output:
@@ -268,7 +267,7 @@ arn:aws:cloudformation:eu-west-2:...:stack/dev-email-secrets/...
 
 #### 1.4 Deploy Updated API Gateway Stack
 ```bash
-npm run deploy:dev -- dev-email-api-gateway
+npx cdk deploy dev-email-api-gateway --context environment=dev
 ```
 
 This updates the API Gateway stack to receive secrets/parameters props. No functional changes occur yet.
@@ -333,19 +332,20 @@ history -c
 
 #### 3.1 Review Prod Deployment Plan
 ```bash
-npm run diff:prod
+npx cdk diff prod-email-secrets --context environment=prod
+npx cdk diff prod-email-api-gateway --context environment=prod
 ```
 
 #### 3.2 Deploy Prod Secrets Stack
 ```bash
-npm run deploy:prod -- prod-email-secrets
+npx cdk deploy prod-email-secrets --context environment=prod --require-approval broadening
 ```
 
 Expected output similar to dev, but with `prod` prefixes.
 
 #### 3.3 Deploy Updated Prod API Gateway Stack
 ```bash
-npm run deploy:prod -- prod-email-api-gateway
+npx cdk deploy prod-email-api-gateway --context environment=prod --require-approval broadening
 ```
 
 #### 3.4 Verify Prod Deployment
@@ -473,12 +473,18 @@ Expected: 11 outputs per environment (4 secret outputs + 7 parameter names).
 
 #### 2. Verify Stack Dependencies
 ```bash
-# API Gateway should depend on Secrets stack
-aws cloudformation describe-stacks \
-  --stack-name dev-email-api-gateway \
+# API Gateway should import secrets outputs
+aws cloudformation list-imports \
+  --export-name dev-TokenHmacSecretArn \
   --region eu-west-2 \
-  --query 'Stacks[0].Tags[?Key==`aws:cloudformation:stack-id`]'
+  --query 'Imports'
+
+aws cloudformation list-imports \
+  --export-name dev-EmailHashHmacSecretArn \
+  --region eu-west-2 \
+  --query 'Imports'
 ```
+Expected: `dev-email-api-gateway` listed in both imports.
 
 #### 3. Verify Resource Tags
 ```bash
@@ -754,11 +760,12 @@ aws cloudformation wait stack-delete-complete \
 aws cloudformation update-stack \
   --stack-name dev-email-api-gateway \
   --use-previous-template \
+  --capabilities CAPABILITY_NAMED_IAM \
   --region eu-west-2
 
 # Or redeploy from previous git commit
 git checkout <previous-commit>
-npm run deploy:dev -- dev-email-api-gateway
+npx cdk deploy dev-email-api-gateway --context environment=dev
 git checkout main
 ```
 
@@ -770,7 +777,7 @@ git checkout main
 # 1. DO NOT delete stack (would orphan secrets)
 # Instead, rollback API Gateway first
 git checkout <previous-commit>
-npm run deploy:prod -- prod-email-api-gateway
+npx cdk deploy prod-email-api-gateway --context environment=prod --require-approval broadening
 git checkout main
 
 # 2. If you must rollback Secrets stack:

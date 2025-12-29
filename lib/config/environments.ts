@@ -43,6 +43,17 @@ export interface EnvironmentConfig {
      */
     readonly enableDeletionProtection: boolean;
   };
+
+  /**
+   * Secrets and parameters configuration
+   */
+  readonly secrets: {
+    /**
+     * Whether secrets and parameters should be retained on stack deletion
+     * Recommended: true for prod (prevent accidental deletion), false for dev (clean deletion)
+     */
+    readonly retainOnDelete: boolean;
+  };
 }
 
 /**
@@ -59,6 +70,9 @@ export const DEV_CONFIG: EnvironmentConfig = {
     enablePointInTimeRecovery: false, // Cost optimization for dev
     enableDeletionProtection: false, // Development flexibility
   },
+  secrets: {
+    retainOnDelete: false, // Clean deletion for dev
+  },
 };
 
 /**
@@ -74,6 +88,9 @@ export const PROD_CONFIG: EnvironmentConfig = {
   dynamodb: {
     enablePointInTimeRecovery: true, // Data protection for prod
     enableDeletionProtection: true, // Prevent accidental deletion
+  },
+  secrets: {
+    retainOnDelete: true, // Prevent accidental secret deletion in prod
   },
 };
 

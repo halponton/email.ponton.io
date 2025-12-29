@@ -58,8 +58,16 @@ Per **PLATFORM_INVARIANTS.md** section 3:
 - IAM permissions for handler functions (placeholders currently have no DynamoDB access; permissions added with real handlers)
 - Table-name environment variables for handler functions (placeholders currently omit these; added with real handlers)
 
+**Milestone 3: Secrets Manager and SSM** ✅ Complete
+- AWS Secrets Manager for HMAC secrets (token generation, email hashing)
+- SSM Parameter Store for non-secret configuration (SES, API, tracking, retention)
+- Dedicated CMK for Secrets Manager encryption
+- Environment-scoped naming (/{env}/email/* for secrets, /email/{env}/* for parameters)
+- RemovalPolicy.RETAIN for prod secrets/parameters
+- Secrets generated automatically at deployment time
+- 7 SSM parameters for SES config, API config, tracking config, and retention config
+
 **Future Milestones:**
-- Milestone 3: Secrets Manager and SSM
 - Milestone 4: SES configuration
 - Milestone 5: Cognito for admin APIs
 - Milestone 6: Observability and retention jobs
@@ -110,7 +118,9 @@ The deploying IAM user/role needs permissions for:
 - IAM (role creation for Lambda)
 - CloudWatch Logs (log group management)
 - DynamoDB (table and GSI management)
-- KMS (key creation and management for DynamoDB encryption)
+- KMS (key creation and management for encryption)
+- Secrets Manager (secret creation and management)
+- SSM Parameter Store (parameter creation and management)
 
 ## Installation
 
@@ -142,6 +152,9 @@ Environment configuration is in `lib/config/environments.ts`:
     enablePointInTimeRecovery: false,  // Cost optimization
     enableDeletionProtection: false,   // Development flexibility
   },
+  secrets: {
+    retainOnDelete: false,             // Clean deletion for dev
+  },
 }
 
 // Prod environment
@@ -155,6 +168,9 @@ Environment configuration is in `lib/config/environments.ts`:
   dynamodb: {
     enablePointInTimeRecovery: true,   // Data protection
     enableDeletionProtection: true,    // Prevent accidental deletion
+  },
+  secrets: {
+    retainOnDelete: true,              // Prevent accidental secret deletion
   },
 }
 ```
@@ -217,6 +233,11 @@ Key outputs:
 - `CampaignsTableName`, `CampaignsTableArn`: Campaigns table details
 - `DeliveriesTableName`, `DeliveriesTableArn`: Deliveries table details
 - `EncryptionKeyId`, `EncryptionKeyArn`: KMS key for DynamoDB encryption
+- `TokenHmacSecretArn`, `TokenHmacSecretName`: Token HMAC secret
+- `EmailHashHmacSecretArn`, `EmailHashHmacSecretName`: Email hash HMAC secret
+- `SesVerifiedDomainParameter`, `SesFromEmailParameter`, `SesFromNameParameter`: SES configuration parameters
+- `ApiBaseUrlParameter`, `ClickRedirectBaseUrlParameter`, `OpenPixelBaseUrlParameter`: API and tracking parameters
+- `EngagementTtlDaysParameter`: Engagement events TTL configuration
 
 ## Testing
 
@@ -305,12 +326,15 @@ email.ponton.io/
 │   ├── stacks/
 │   │   ├── certificate-stack.ts # ACM certificate stack
 │   │   ├── dynamodb-stack.ts    # DynamoDB tables stack
+│   │   ├── secrets-stack.ts     # Secrets Manager and SSM parameters stack
 │   │   └── api-gateway-stack.ts # API Gateway and routes stack
 │   │
 │   ├── constructs/
 │   │   ├── lambda-function.ts   # Standardized Lambda construct
 │   │   ├── api-routes.ts        # API Gateway routes construct
-│   │   └── dynamodb-tables.ts   # DynamoDB tables construct
+│   │   ├── dynamodb-tables.ts   # DynamoDB tables construct
+│   │   ├── secrets.ts           # Secrets Manager construct
+│   │   └── ssm-parameters.ts    # SSM Parameter Store construct
 │   │
 │   └── handlers/
 │       ├── health.ts            # Health check handler
@@ -323,16 +347,19 @@ email.ponton.io/
 ## Stack Dependencies
 
 ```
-dev-email-certificate ──┐
-                        ├──> dev-email-api-gateway
-dev-email-dynamodb ─────┘
+dev-email-certificate ───────┐
+dev-email-dynamodb ──────────┼──> dev-email-api-gateway
+dev-email-secrets ───────────┘
 ```
 
-The API Gateway stack depends on:
-- Certificate stack (for ACM certificate and Route53 hosted zone)
-- DynamoDB stack (for table references and IAM permissions)
+Stack dependencies:
+- **API Gateway Stack** depends on:
+  - Certificate stack (for ACM certificate and Route53 hosted zone)
+  - DynamoDB stack (for table references and IAM permissions)
+  - Secrets stack (for secrets and parameters access)
 
-Certificate and DynamoDB stacks can be deployed in parallel.
+Certificate, DynamoDB, and Secrets stacks can be deployed in parallel.
+API Gateway stack must be deployed last (depends on all others).
 
 ## Environment Variables
 
@@ -415,6 +442,112 @@ The platform uses 5 DynamoDB tables aligned with **PLATFORM_INVARIANTS.md** data
 - Hash is deterministic for duplicate prevention but requires secret key
 - Infrastructure layer defines schema; domain layer owns hashing logic
 
+## Secrets Management
+
+### Overview
+
+Per **PLATFORM_INVARIANTS.md** section 4:
+- No hardcoded secrets, ever
+- Secrets live in AWS Secrets Manager
+- Non-secret configuration lives in SSM Parameter Store
+- Distinct secrets and parameters per environment
+
+### Secrets (AWS Secrets Manager)
+
+**Token HMAC Secret** (`/{env}/email/token-hmac-secret`):
+- For generating and validating secure tokens (confirm, unsubscribe)
+
+**Email Hash HMAC Secret** (`/{env}/email/email-hash-hmac-secret`):
+- For deterministic email hashing (duplicate prevention)
+
+Features:
+- Dedicated CMK encryption for Secrets Manager
+- CloudTrail logging enabled
+- RemovalPolicy.RETAIN for prod
+- Secrets are generated automatically at deployment time
+
+### SSM Parameters (AWS Systems Manager Parameter Store)
+
+**SES Configuration:**
+- `/email/{env}/ses/verified-domain`: SES verified domain (email.ponton.io)
+- `/email/{env}/ses/from-email`: Default from email address
+- `/email/{env}/ses/from-name`: Default from display name
+
+**API Configuration:**
+- `/email/{env}/api/base-url`: API base URL for generating links
+
+**Tracking Configuration:**
+- `/email/{env}/tracking/click-redirect-base-url`: Base URL for click tracking
+- `/email/{env}/tracking/open-pixel-base-url`: Base URL for open tracking
+
+**Retention Configuration:**
+- `/email/{env}/retention/engagement-ttl-days`: Engagement events TTL (180 days)
+
+### Secret Verification and Rotation
+
+```bash
+# Dev environment - token HMAC secret
+aws secretsmanager get-secret-value \
+  --secret-id /dev/email/token-hmac-secret \
+  --region eu-west-2 \
+  --query 'SecretString' \
+  --output text
+
+# Dev environment - email hash HMAC secret
+aws secretsmanager get-secret-value \
+  --secret-id /dev/email/email-hash-hmac-secret \
+  --region eu-west-2 \
+  --query 'SecretString' \
+  --output text
+```
+
+Rotate secrets as needed:
+
+```bash
+TOKEN_SECRET=$(openssl rand -base64 32)
+EMAIL_SECRET=$(openssl rand -base64 32)
+
+aws secretsmanager put-secret-value \
+  --secret-id /dev/email/token-hmac-secret \
+  --secret-string "$TOKEN_SECRET" \
+  --region eu-west-2
+
+aws secretsmanager put-secret-value \
+  --secret-id /dev/email/email-hash-hmac-secret \
+  --secret-string "$EMAIL_SECRET" \
+  --region eu-west-2
+```
+
+Security requirements:
+- Each secret MUST be at least 32 bytes (256 bits) of cryptographically secure random data
+- Dev and prod MUST use different secret values
+- Do NOT commit secrets to version control
+- Rotate secrets periodically (recommended: annually)
+
+### Updating SSM Parameters
+
+SSM parameters can be updated without redeploying the stack:
+
+```bash
+# Update SES from email (dev)
+aws ssm put-parameter \
+  --name /email/dev/ses/from-email \
+  --value "newsletter-dev@email.ponton.io" \
+  --type String \
+  --overwrite \
+  --region eu-west-2
+
+# Update engagement TTL days (prod)
+aws ssm put-parameter \
+  --name /email/prod/retention/engagement-ttl-days \
+  --value "180" \
+  --type String \
+  --overwrite \
+  --region eu-west-2
+```
+
+Note: Lambda functions cache parameters on cold start, so changes may take several minutes to propagate.
+
 ## Security Considerations
 
 Per **PLATFORM_INVARIANTS.md** section 16:
@@ -432,8 +565,8 @@ This infrastructure layer **MUST**:
 
 Per **PLATFORM_INVARIANTS.md** section 4:
 - No hardcoded secrets, ever
-- Secrets live in AWS Secrets Manager (future milestone)
-- Non-secret configuration lives in SSM Parameter Store (future milestone)
+- Secrets live in AWS Secrets Manager
+- Non-secret configuration lives in SSM Parameter Store
 - `.env` files are local-only and never committed
 
 ### Least Privilege IAM
@@ -517,22 +650,18 @@ cdk destroy --all --context environment=prod
 
 ## Next Steps
 
-After Milestone 2 completion:
+After Milestone 3 completion:
 
-1. **Milestone 3**: Configure Secrets Manager and SSM
-   - HMAC signing keys for email hashing
-   - SES configuration parameters
-
-2. **Milestone 4**: Set up SES configuration
+1. **Milestone 4**: Set up SES configuration
    - Verify `email.ponton.io` domain
    - Configure SNS topics for bounce/complaint handling
    - Set up configuration sets
 
-3. **Milestone 5**: Implement Cognito
+2. **Milestone 5**: Implement Cognito
    - Admin user pool
    - API Gateway JWT authorizers
 
-4. **Milestone 6**: Observability and retention
+3. **Milestone 6**: Observability and retention
    - CloudWatch dashboards
    - Monitoring alarms for table metrics
 
@@ -556,6 +685,7 @@ This repository follows strict guidelines per `agents.md`:
 - **PLATFORM_INVARIANTS.md**: Platform-wide rules (source of truth)
 - **plans.md**: Milestone roadmap
 - **agents.md**: Agent development guidelines
+- **DEPLOYMENT_GUIDE_MILESTONE3.md**: Milestone 3 deployment steps and verification
 - **README.md**: This file (infrastructure setup and deployment)
 
 ## License

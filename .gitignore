@@ -4,6 +4,8 @@
 *.d.ts
 node_modules
 cdk.out
+cdk.out.dev
+cdk.out.prod
 
 # Compiled JavaScript files
 lib/**/*.js

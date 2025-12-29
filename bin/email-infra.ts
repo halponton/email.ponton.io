@@ -3,6 +3,7 @@ import 'source-map-support/register';
 import * as cdk from 'aws-cdk-lib';
 import { CertificateStack } from '../lib/stacks/certificate-stack';
 import { DynamoDBStack } from '../lib/stacks/dynamodb-stack';
+import { SecretsStack } from '../lib/stacks/secrets-stack';
 import { ApiGatewayStack } from '../lib/stacks/api-gateway-stack';
 import { getEnvironmentConfig } from '../lib/config/environments';
 
@@ -29,6 +30,12 @@ import { getEnvironmentConfig } from '../lib/config/environments';
  * - Global Secondary Indexes for efficient queries
  * - Customer Managed Keys for encryption at rest
  * - Point-in-Time Recovery and deletion protection for prod
+ *
+ * Milestone 3: Secrets Manager and SSM
+ * - AWS Secrets Manager for HMAC secrets (token generation, email hashing)
+ * - SSM Parameter Store for non-secret configuration (SES, API, tracking, retention)
+ * - Dedicated CMK encryption for Secrets Manager
+ * - Environment-scoped naming and distinct values per environment
  */
 
 const app = new cdk.App();
@@ -54,6 +61,7 @@ const env = {
 // Stack naming convention: {env}-email-{stack-name}
 const certificateStackName = `${config.env}-email-certificate`;
 const dynamodbStackName = `${config.env}-email-dynamodb`;
+const secretsStackName = `${config.env}-email-secrets`;
 const apiGatewayStackName = `${config.env}-email-api-gateway`;
 
 /**
@@ -83,10 +91,25 @@ const dynamodbStack = new DynamoDBStack(app, dynamodbStackName, {
 });
 
 /**
+ * Secrets Stack
+ *
+ * Creates AWS Secrets Manager secrets and SSM Parameter Store parameters.
+ * Uses a dedicated CMK for Secrets Manager.
+ * Must be deployed before API Gateway Stack (Lambda functions need secrets/parameters).
+ */
+const secretsStack = new SecretsStack(app, secretsStackName, {
+  env,
+  config,
+  description: `Secrets Manager and SSM Parameter Store for email.ponton.io (${config.env})`,
+  stackName: secretsStackName,
+});
+
+/**
  * API Gateway Stack
  *
  * Depends on Certificate Stack for ACM certificate and Route53 hosted zone.
  * Depends on DynamoDB Stack for table references and IAM permissions.
+ * Depends on Secrets Stack for secrets and parameters (Lambda environment config).
  * Creates HTTP API with custom domain and all routes.
  */
 const apiGatewayStack = new ApiGatewayStack(app, apiGatewayStackName, {
@@ -95,6 +118,8 @@ const apiGatewayStack = new ApiGatewayStack(app, apiGatewayStackName, {
   certificate: certificateStack.certificate,
   hostedZone: certificateStack.hostedZone,
   tables: dynamodbStack.tables,
+  secrets: secretsStack.secrets,
+  parameters: secretsStack.parameters,
   description: `API Gateway and Lambda functions for email.ponton.io (${config.env})`,
   stackName: apiGatewayStackName,
 });
@@ -102,6 +127,7 @@ const apiGatewayStack = new ApiGatewayStack(app, apiGatewayStackName, {
 // Explicit dependencies
 apiGatewayStack.addDependency(certificateStack);
 apiGatewayStack.addDependency(dynamodbStack);
+apiGatewayStack.addDependency(secretsStack);
 
 // Add global tags
 cdk.Tags.of(app).add('Project', 'email.ponton.io');

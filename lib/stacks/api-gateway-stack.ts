@@ -9,6 +9,8 @@ import { EnvironmentConfig, envResourceName } from '../config/environments';
 import { StandardLambdaFunction } from '../constructs/lambda-function';
 import { ApiRoutes, RouteDefinition } from '../constructs/api-routes';
 import { DynamoDBTablesConstruct } from '../constructs/dynamodb-tables';
+import { SecretsConstruct } from '../constructs/secrets';
+import { SSMParametersConstruct } from '../constructs/ssm-parameters';
 
 /**
  * Props for ApiGatewayStack
@@ -18,6 +20,8 @@ export interface ApiGatewayStackProps extends cdk.StackProps {
   readonly certificate: acm.ICertificate;
   readonly hostedZone: route53.IHostedZone;
   readonly tables: DynamoDBTablesConstruct;
+  readonly secrets: SecretsConstruct;
+  readonly parameters: SSMParametersConstruct;
 }
 
 /**
@@ -75,7 +79,7 @@ export class ApiGatewayStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: ApiGatewayStackProps) {
     super(scope, id, props);
 
-    const { config, certificate, hostedZone, tables } = props;
+    const { config, certificate, hostedZone, tables, secrets, parameters } = props;
 
     // Create Lambda functions
     this.healthFunction = new StandardLambdaFunction(this, 'HealthFunction', {
@@ -282,28 +286,43 @@ export class ApiGatewayStack extends cdk.Stack {
     });
 
     /**
-     * DynamoDB Permissions Architecture
+     * IAM Permissions Architecture
      *
      * Per least privilege principle, IAM permissions are granted ONLY to Lambda functions
      * that actually need them. Permissions are granted per-function based on actual usage.
      *
-     * Current state (Milestone 2):
-     * - healthFunction: No DynamoDB access (returns static 200 OK)
-     * - notImplementedFunction: No DynamoDB access (returns static 501 Not Implemented)
-     * - adminAuthorizerFunction: No DynamoDB access (deny-all placeholder for Milestone 5)
+     * Current state (Milestone 3):
+     * - healthFunction: No DynamoDB/Secrets/SSM access (returns static 200 OK)
+     * - notImplementedFunction: No DynamoDB/Secrets/SSM access (returns static 501 Not Implemented)
+     * - adminAuthorizerFunction: No DynamoDB/Secrets/SSM access (deny-all placeholder for Milestone 5)
      *
      * Future milestones:
      * When implementing real handlers, grant permissions ONLY to functions that need them:
+     *
+     * DynamoDB permissions:
      * - Public API functions: Read/write to Subscribers, AuditEvents, EngagementEvents
      * - Admin API functions: Read access to all tables (write access granted per-endpoint)
      * - KMS decrypt/encrypt: Required only for functions accessing CMK-encrypted tables
      *
+     * Secrets Manager permissions:
+     * - Functions that generate/validate tokens: Read access to tokenHmacSecret
+     * - Functions that hash emails: Read access to emailHashHmacSecret
+     * - Example: secrets.tokenHmacSecret.grantRead(subscribeFunction.function)
+     *
+     * SSM Parameter Store permissions:
+     * - Functions that send emails: Read access to SES parameters
+     * - Functions that generate tracking links: Read access to tracking parameters
+     * - Example: parameters.sesFromEmail.grantRead(sendCampaignFunction.function)
+     *
      * Example for future implementation:
      * ```typescript
-     * // Subscribe handler needs Subscribers + AuditEvents
+     * // Subscribe handler needs Subscribers, AuditEvents, HMAC secrets, and SSM parameters
      * tables.subscribersTable.grantReadWriteData(subscribeFunction.function);
      * tables.auditEventsTable.grantWriteData(subscribeFunction.function);
      * tables.encryptionKey.grantEncryptDecrypt(subscribeFunction.function);
+     * secrets.tokenHmacSecret.grantRead(subscribeFunction.function);
+     * secrets.emailHashHmacSecret.grantRead(subscribeFunction.function);
+     * parameters.apiBaseUrl.grantRead(subscribeFunction.function);
      * ```
      *
      * SECURITY: Never grant permissions "just in case" - only grant when code needs it.
@@ -311,6 +330,7 @@ export class ApiGatewayStack extends cdk.Stack {
 
     // No permissions granted to placeholder functions
     // Permissions will be added in future milestones when handlers are implemented
+    // Secrets and parameters are now available via the `secrets` and `parameters` props
 
     // Outputs
     new cdk.CfnOutput(this, 'ApiUrl', {

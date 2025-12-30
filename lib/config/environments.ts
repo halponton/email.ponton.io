@@ -144,7 +144,7 @@ export const DEV_CONFIG: EnvironmentConfig = {
   },
   waf: {
     enable: false,
-    adminRateLimit: 10000,
+    adminRateLimit: 1000,
   },
   dynamodb: {
     enablePointInTimeRecovery: false, // Cost optimization for dev
@@ -189,7 +189,7 @@ export const PROD_CONFIG: EnvironmentConfig = {
   },
   waf: {
     enable: true,
-    adminRateLimit: 10000,
+    adminRateLimit: 1000,
   },
   dynamodb: {
     enablePointInTimeRecovery: true, // Data protection for prod

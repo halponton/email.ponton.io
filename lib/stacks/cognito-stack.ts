@@ -136,11 +136,11 @@ export class CognitoStack extends cdk.Stack {
           // SES identity (email.ponton.io) must be verified before deployment
         }),
         // Advanced security features
-        // M-1: Use new standardThreatProtectionMode API (replaces deprecated advancedSecurityMode)
-        standardThreatProtectionMode:
+        // M-1: Using advancedSecurityMode (standardThreatProtectionMode requires CDK 2.233.0+)
+        advancedSecurityMode:
           config.env === 'prod'
-            ? cognito.StandardThreatProtectionMode.FULL_FUNCTION
-            : cognito.StandardThreatProtectionMode.AUDIT_ONLY,
+            ? cognito.AdvancedSecurityMode.ENFORCED
+            : cognito.AdvancedSecurityMode.AUDIT,
         // User invitation template
         userInvitation: {
           emailSubject: 'Your admin account for Email.Ponton.io',

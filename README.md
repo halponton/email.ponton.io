@@ -369,6 +369,7 @@ The Cognito User Pool is configured for maximum security:
   selfSignUpEnabled: false,
 
   // Advanced security (prod: ENFORCED, dev: AUDIT)
+  // Note: advancedSecurityMode is used because CDK 2.125.0 does not support standardThreatProtectionMode.
   advancedSecurityMode: env === 'prod' ? 'ENFORCED' : 'AUDIT',
 }
 ```

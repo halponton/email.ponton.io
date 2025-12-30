@@ -38,6 +38,7 @@
   },
   "dependencies": {
     "aws-cdk-lib": "^2.125.0",
+    "aws-jwt-verify": "^4.0.1",
     "constructs": "^10.3.0",
     "source-map-support": "^0.5.21"
   }

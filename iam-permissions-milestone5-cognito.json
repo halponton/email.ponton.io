@@ -1,0 +1,66 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CognitoUserPoolCreateList",
+      "Effect": "Allow",
+      "Action": [
+        "cognito-idp:CreateUserPool",
+        "cognito-idp:ListUserPools"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "CognitoUserPoolManage",
+      "Effect": "Allow",
+      "Action": [
+        "cognito-idp:UpdateUserPool",
+        "cognito-idp:DeleteUserPool",
+        "cognito-idp:DescribeUserPool",
+        "cognito-idp:TagResource",
+        "cognito-idp:UntagResource"
+      ],
+      "Resource": [
+        "arn:aws:cognito-idp:eu-west-2:*:userpool/*"
+      ]
+    },
+    {
+      "Sid": "CognitoUserPoolClientManage",
+      "Effect": "Allow",
+      "Action": [
+        "cognito-idp:CreateUserPoolClient",
+        "cognito-idp:UpdateUserPoolClient",
+        "cognito-idp:DeleteUserPoolClient",
+        "cognito-idp:DescribeUserPoolClient",
+        "cognito-idp:ListUserPoolClients"
+      ],
+      "Resource": [
+        "arn:aws:cognito-idp:eu-west-2:*:userpool/*"
+      ]
+    },
+    {
+      "Sid": "CognitoUserPoolDomainManage",
+      "Effect": "Allow",
+      "Action": [
+        "cognito-idp:CreateUserPoolDomain",
+        "cognito-idp:DeleteUserPoolDomain",
+        "cognito-idp:DescribeUserPoolDomain"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "CognitoUserPoolGroupManage",
+      "Effect": "Allow",
+      "Action": [
+        "cognito-idp:CreateGroup",
+        "cognito-idp:DeleteGroup",
+        "cognito-idp:UpdateGroup",
+        "cognito-idp:GetGroup",
+        "cognito-idp:ListGroups"
+      ],
+      "Resource": [
+        "arn:aws:cognito-idp:eu-west-2:*:userpool/*"
+      ]
+    }
+  ]
+}

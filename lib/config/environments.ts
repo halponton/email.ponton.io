@@ -28,6 +28,34 @@ export interface EnvironmentConfig {
   readonly enableDetailedMonitoring: boolean;
 
   /**
+   * API Gateway throttling configuration
+   */
+  readonly apiGateway: {
+    /**
+     * Stage-level throttling limits (requests per second)
+     */
+    readonly throttle: {
+      readonly rateLimit: number;
+      readonly burstLimit: number;
+    };
+  };
+
+  /**
+   * WAF configuration
+   */
+  readonly waf: {
+    /**
+     * Whether to enable WAF rate-based protection
+     */
+    readonly enable: boolean;
+
+    /**
+     * Rate limit per 5-minute period per IP for /admin paths
+     */
+    readonly adminRateLimit: number;
+  };
+
+  /**
    * DynamoDB configuration
    */
   readonly dynamodb: {
@@ -81,6 +109,21 @@ export interface EnvironmentConfig {
      */
     readonly enableEventNotifications: boolean;
   };
+
+  /**
+   * Cognito configuration for admin authentication
+   */
+  readonly cognito: {
+    /**
+     * Callback URLs for OAuth flow (after successful sign-in)
+     */
+    readonly callbackUrls: string[];
+
+    /**
+     * Logout URLs for OAuth flow (after sign-out)
+     */
+    readonly logoutUrls: string[];
+  };
 }
 
 /**
@@ -93,6 +136,16 @@ export const DEV_CONFIG: EnvironmentConfig = {
   sesSandbox: true,
   hostedZoneName: 'ponton.io',
   enableDetailedMonitoring: false,
+  apiGateway: {
+    throttle: {
+      rateLimit: 20,
+      burstLimit: 40,
+    },
+  },
+  waf: {
+    enable: false,
+    adminRateLimit: 1000,
+  },
   dynamodb: {
     enablePointInTimeRecovery: false, // Cost optimization for dev
     enableDeletionProtection: false, // Development flexibility
@@ -106,6 +159,16 @@ export const DEV_CONFIG: EnvironmentConfig = {
     enableDkim: true, // Email deliverability
     enableEventNotifications: true, // Bounce/complaint handling
   },
+  cognito: {
+    callbackUrls: [
+      'http://localhost:3000/auth/callback',
+      'https://mailer-dev.ponton.io/auth/callback',
+    ],
+    logoutUrls: [
+      'http://localhost:3000/auth/logout',
+      'https://mailer-dev.ponton.io/auth/logout',
+    ],
+  },
 };
 
 /**
@@ -118,6 +181,16 @@ export const PROD_CONFIG: EnvironmentConfig = {
   sesSandbox: false,
   hostedZoneName: 'ponton.io',
   enableDetailedMonitoring: true,
+  apiGateway: {
+    throttle: {
+      rateLimit: 100,
+      burstLimit: 200,
+    },
+  },
+  waf: {
+    enable: true,
+    adminRateLimit: 1000,
+  },
   dynamodb: {
     enablePointInTimeRecovery: true, // Data protection for prod
     enableDeletionProtection: true, // Prevent accidental deletion
@@ -130,6 +203,10 @@ export const PROD_CONFIG: EnvironmentConfig = {
     configurationSetName: 'prod-email-ses-config',
     enableDkim: true, // Email deliverability
     enableEventNotifications: true, // Bounce/complaint handling
+  },
+  cognito: {
+    callbackUrls: ['https://mailer.ponton.io/auth/callback'],
+    logoutUrls: ['https://mailer.ponton.io/auth/logout'],
   },
 };
 

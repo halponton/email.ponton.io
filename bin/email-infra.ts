@@ -5,6 +5,7 @@ import { CertificateStack } from '../lib/stacks/certificate-stack';
 import { DynamoDBStack } from '../lib/stacks/dynamodb-stack';
 import { SecretsStack } from '../lib/stacks/secrets-stack';
 import { SESStack } from '../lib/stacks/ses-stack';
+import { CognitoStack } from '../lib/stacks/cognito-stack';
 import { ApiGatewayStack } from '../lib/stacks/api-gateway-stack';
 import { getEnvironmentConfig } from '../lib/config/environments';
 
@@ -45,6 +46,13 @@ import { getEnvironmentConfig } from '../lib/config/environments';
  * - Dead Letter Queue for failed events
  * - Lambda handler for processing delivery, bounce, complaint, reject events
  * - Dedicated KMS key for SES event encryption
+ *
+ * Milestone 5: Cognito for Admin APIs
+ * - Cognito User Pool with MFA and strong password policy
+ * - User Pool Client for OAuth Authorization Code Grant
+ * - User Pool Domain (OAuth endpoints for admin UI)
+ * - Administrators group for admin access
+ * - Lambda authorizer for JWT validation with group membership enforcement
  */
 
 const app = new cdk.App();
@@ -72,6 +80,7 @@ const certificateStackName = `${config.env}-email-certificate`;
 const dynamodbStackName = `${config.env}-email-dynamodb`;
 const secretsStackName = `${config.env}-email-secrets`;
 const sesStackName = `${config.env}-email-ses`;
+const cognitoStackName = `${config.env}-email-cognito`;
 const apiGatewayStackName = `${config.env}-email-api-gateway`;
 
 /**
@@ -136,11 +145,25 @@ const sesStack = new SESStack(app, sesStackName, {
 });
 
 /**
+ * Cognito Stack
+ *
+ * Creates Cognito User Pool for admin authentication.
+ * Independent of other stacks.
+ */
+const cognitoStack = new CognitoStack(app, cognitoStackName, {
+  env,
+  config,
+  description: `Cognito User Pool for admin authentication (${config.env})`,
+  stackName: cognitoStackName,
+});
+
+/**
  * API Gateway Stack
  *
  * Depends on Certificate Stack for ACM certificate and Route53 hosted zone.
  * Depends on DynamoDB Stack for table references and IAM permissions.
  * Depends on Secrets Stack for secrets and parameters (Lambda environment config).
+ * Depends on Cognito Stack for User Pool ID and Client ID (JWT validation).
  * Creates HTTP API with custom domain and all routes.
  */
 const apiGatewayStack = new ApiGatewayStack(app, apiGatewayStackName, {
@@ -151,6 +174,8 @@ const apiGatewayStack = new ApiGatewayStack(app, apiGatewayStackName, {
   tables: dynamodbStack.tables,
   secrets: secretsStack.secrets,
   parameters: secretsStack.parameters,
+  cognitoUserPoolId: cognitoStack.userPool.userPoolId,
+  cognitoClientId: cognitoStack.userPoolClient.userPoolClientId,
   description: `API Gateway and Lambda functions for email.ponton.io (${config.env})`,
   stackName: apiGatewayStackName,
 });
@@ -162,6 +187,7 @@ sesStack.addDependency(dynamodbStack);
 apiGatewayStack.addDependency(certificateStack);
 apiGatewayStack.addDependency(dynamodbStack);
 apiGatewayStack.addDependency(secretsStack);
+apiGatewayStack.addDependency(cognitoStack);
 
 // Add global tags
 cdk.Tags.of(app).add('Project', 'email.ponton.io');

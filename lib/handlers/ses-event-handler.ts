@@ -152,7 +152,7 @@ export async function handler(
     console.log('SES Event Handler invoked', {
       environment,
       recordCount: event.Records.length,
-      requestId: context.requestId,
+      requestId: context.awsRequestId,
     });
   }
 
@@ -167,7 +167,7 @@ export async function handler(
       console.error('Failed to process SES event', {
         messageId: record.messageId,
         error: error instanceof Error ? error.message : 'Unknown error',
-        requestId: context.requestId,
+        requestId: context.awsRequestId,
       });
 
       // Add to batch item failures for retry
@@ -181,7 +181,7 @@ export async function handler(
     console.warn('Partial batch failure', {
       failedCount: batchItemFailures.length,
       totalCount: event.Records.length,
-      requestId: context.requestId,
+      requestId: context.awsRequestId,
     });
   }
 

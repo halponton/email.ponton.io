@@ -37,7 +37,7 @@ Must not contain:
 - Domain behaviour logic
 - UI code
 
-### newsletter.ponton.io
+### mailer.ponton.io
 Owns the admin UI:
 - Shadcn UI dashboard
 - Cognito authentication and role gating
@@ -141,7 +141,7 @@ Operational data expiry must not affect historical campaign metrics.
 ## 12. Development order
 1. ponton.io_email_service
 2. email.ponton.io
-3. newsletter.ponton.io
+3. mailer.ponton.io
 
 ## 13. Documentation discipline
 - README.md is canonical in every repo.

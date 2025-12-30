@@ -22,6 +22,8 @@ export interface ApiGatewayStackProps extends cdk.StackProps {
   readonly tables: DynamoDBTablesConstruct;
   readonly secrets: SecretsConstruct;
   readonly parameters: SSMParametersConstruct;
+  readonly cognitoUserPoolId: string;
+  readonly cognitoClientId: string;
 }
 
 /**
@@ -43,7 +45,7 @@ export interface ApiGatewayStackProps extends cdk.StackProps {
  *   - GET /v1/track/click/{token} - Track link clicks and redirect
  *   - GET /v1/health - Health check (200 OK)
  *
- * - Admin API (requires authentication - currently blocked):
+ * - Admin API (requires authentication via Cognito):
  *   - POST /admin/campaigns - Create campaign
  *   - GET /admin/campaigns/{id} - Get campaign details
  *   - POST /admin/campaigns/{id}/send - Send campaign
@@ -52,10 +54,16 @@ export interface ApiGatewayStackProps extends cdk.StackProps {
  *
  * Milestone 1:
  * - Public routes except /v1/health return 501 Not Implemented
- * - Admin routes are blocked by a placeholder authorizer (401 Unauthorized)
  *
- * SECURITY: All /admin/* routes are protected by a placeholder Lambda authorizer
- * that returns 401 Unauthorized until Cognito is implemented in Milestone 5.
+ * Milestone 5:
+ * - Admin routes protected by Cognito Lambda authorizer (401/403 for unauth users)
+ * - JWT validation with group membership enforcement
+ * - Users must be in "Administrators" group
+ *
+ * SECURITY: All /admin/* routes are protected by Lambda authorizer that:
+ * - Validates JWT tokens from Cognito User Pool
+ * - Enforces group membership (Administrators group required)
+ * - Logs all authorization attempts for audit trail
  */
 export class ApiGatewayStack extends cdk.Stack {
   /** The HTTP API */
@@ -79,7 +87,7 @@ export class ApiGatewayStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: ApiGatewayStackProps) {
     super(scope, id, props);
 
-    const { config, certificate, hostedZone, tables, secrets, parameters } = props;
+    const { config, certificate, hostedZone, tables, secrets, parameters, cognitoUserPoolId, cognitoClientId } = props;
 
     // Create Lambda functions
     this.healthFunction = new StandardLambdaFunction(this, 'HealthFunction', {
@@ -105,22 +113,31 @@ export class ApiGatewayStack extends cdk.Stack {
       }
     );
 
-    // Create admin authorizer function
-    // TODO (Milestone 5): Replace with Cognito JWT authorizer
+    // Create Cognito authorizer function
     this.adminAuthorizerFunction = new StandardLambdaFunction(
       this,
       'AdminAuthorizerFunction',
       {
         config,
-        functionName: 'email-api-admin-authorizer',
-        handlerFileName: 'admin-authorizer',
-        description: 'TEMPORARY: Placeholder authorizer that blocks all admin access until Cognito (Milestone 5)',
-        memorySize: 128,
+        functionName: 'email-api-cognito-authorizer',
+        handlerFileName: 'cognito-authorizer',
+        description: 'Cognito JWT authorizer for admin routes with group membership validation',
+        memorySize: 256, // Increased for JWT verification
         timeout: 10,
+        environment: {
+          USER_POOL_ID: cognitoUserPoolId,
+          CLIENT_ID: cognitoClientId,
+        },
       }
     );
 
     // Create HTTP API
+    const corsOrigins = Array.from(
+      new Set(
+        [...config.cognito.callbackUrls, ...config.cognito.logoutUrls].map(url => new URL(url).origin)
+      )
+    );
+
     this.httpApi = new apigatewayv2.HttpApi(
       this,
       envResourceName(config.env, 'EmailApi'),
@@ -129,9 +146,8 @@ export class ApiGatewayStack extends cdk.Stack {
         description: `Email platform API (${config.env})`,
         // CORS configuration for future admin UI
         corsPreflight: {
-          allowOrigins: config.env === 'dev'
-            ? ['http://localhost:3000']
-            : ['https://newsletter.ponton.io'],
+          // Keep CORS in sync with configured Cognito callback/logout origins.
+          allowOrigins: corsOrigins,
           allowMethods: [
             apigatewayv2.CorsHttpMethod.GET,
             apigatewayv2.CorsHttpMethod.POST,
@@ -178,19 +194,21 @@ export class ApiGatewayStack extends cdk.Stack {
     });
 
     // Create Lambda authorizer for admin routes
-    // TODO (Milestone 5): Replace this with Cognito User Pool authorizer
-    // This is a TEMPORARY security measure that blocks all admin access
+    // Uses Cognito JWT validation with group membership enforcement
+    // H-2: SECURITY - Caching disabled to prevent privilege escalation via cached policies.
+    // The authorizer generates route-specific IAM policies (using event.routeArn), but the
+    // cache key only includes the Authorization header. This could allow a cached "Allow"
+    // policy for one route to be reused for a different route the user shouldn't access.
+    // For production optimization, consider enabling caching with per-route identity source
+    // (e.g., adding '$context.routeKey' to identitySource).
     this.adminAuthorizer = new apigatewayv2Authorizers.HttpLambdaAuthorizer(
       'AdminAuthorizer',
       this.adminAuthorizerFunction.function,
       {
-        authorizerName: envResourceName(config.env, 'admin-authorizer'),
-        responseTypes: [apigatewayv2Authorizers.HttpLambdaResponseType.SIMPLE],
-        resultsCacheTtl: cdk.Duration.seconds(0),
-        // Deny-all authorizer should not cache responses
-        // TODO (Milestone 5): When implementing Cognito, add:
-        //   identitySource: ['$request.header.Authorization'],
-        //   resultsCacheTtl: cdk.Duration.minutes(5),
+        authorizerName: envResourceName(config.env, 'cognito-authorizer'),
+        responseTypes: [apigatewayv2Authorizers.HttpLambdaResponseType.IAM],
+        identitySource: ['$request.header.Authorization'],
+        resultsCacheTtl: cdk.Duration.seconds(0), // Disabled for security (MVP)
       }
     );
 
@@ -239,7 +257,7 @@ export class ApiGatewayStack extends cdk.Stack {
       },
 
       // Admin API - Campaign management (Milestone 5+)
-      // All admin routes require authentication (currently blocked by placeholder authorizer)
+      // All admin routes require authentication via Cognito authorizer
       {
         method: 'POST',
         path: '/admin/campaigns',
@@ -294,7 +312,7 @@ export class ApiGatewayStack extends cdk.Stack {
      * Current state (Milestone 3):
      * - healthFunction: No DynamoDB/Secrets/SSM access (returns static 200 OK)
      * - notImplementedFunction: No DynamoDB/Secrets/SSM access (returns static 501 Not Implemented)
-     * - adminAuthorizerFunction: No DynamoDB/Secrets/SSM access (deny-all placeholder for Milestone 5)
+     * - adminAuthorizerFunction: No DynamoDB/Secrets/SSM access (Cognito JWT authorizer)
      *
      * Future milestones:
      * When implementing real handlers, grant permissions ONLY to functions that need them:

@@ -20,7 +20,7 @@ Per platform invariants, this repository owns:
 
 This repository **must not** contain:
 - Domain behaviour logic (lives in `ponton.io_email_service`)
-- UI code (lives in `newsletter.ponton.io`)
+- UI code (lives in `mailer.ponton.io`)
 
 ## Architecture
 
@@ -84,8 +84,31 @@ Per **PLATFORM_INVARIANTS.md** section 3:
 - DMARC: Monitoring mode (p=none, upgrade to p=quarantine/reject later)
 - MAIL FROM domain: bounce.email.ponton.io (MX + SPF records in Route53)
 
+**Milestone 5: Cognito for Admin APIs** ✅ Complete
+- Cognito User Pool with strong security configuration
+  - MFA: REQUIRED (TOTP only, no SMS)
+  - Password policy: 14+ characters with complexity requirements
+  - Email-only sign-in (no username or phone)
+  - Self-signup: DISABLED (admin invite only)
+  - Advanced Security: ENFORCED for prod, AUDIT for dev
+- User Pool Client for OAuth Authorization Code Grant
+  - Access token: 30 minutes
+  - Refresh token: 7 days
+  - Scopes: email, openid, profile
+  - Direct password auth disabled (no USER_PASSWORD_AUTH)
+- User Pool Domain (OAuth endpoints for mailer UI)
+  - Dev: dev-email-admin.auth.eu-west-2.amazoncognito.com
+  - Prod: prod-email-admin.auth.eu-west-2.amazoncognito.com
+- Administrators group for admin API access
+- Lambda authorizer for admin routes
+  - JWT verification using aws-jwt-verify library
+  - Group membership enforcement (must be in "Administrators")
+  - Structured security logging for all authorization attempts
+  - Authorization cache disabled (per-route IAM policy safety)
+- Email via SES (admin@email.ponton.io for prod, admin-dev@email.ponton.io for dev)
+- Stack outputs for UI integration (User Pool ID, Client ID, Domain, Issuer)
+
 **Future Milestones:**
-- Milestone 5: Cognito for admin APIs
 - Milestone 6: Observability and retention jobs
 
 ### API Routes
@@ -105,15 +128,15 @@ Per **PLATFORM_INVARIANTS.md** section 3:
 
 | Method | Path | Status | Description |
 |--------|------|--------|-------------|
-| POST | `/admin/campaigns` | 🔒 Blocked | Create campaign |
-| GET | `/admin/campaigns/{id}` | 🔒 Blocked | Get campaign details |
-| POST | `/admin/campaigns/{id}/send` | 🔒 Blocked | Send campaign |
-| GET | `/admin/subscribers` | 🔒 Blocked | List subscribers |
-| POST | `/admin/subscribers/{id}/suppress` | 🔒 Blocked | Suppress subscriber |
+| POST | `/admin/campaigns` | 🔐 Protected | Create campaign |
+| GET | `/admin/campaigns/{id}` | 🔐 Protected | Get campaign details |
+| POST | `/admin/campaigns/{id}/send` | 🔐 Protected | Send campaign |
+| GET | `/admin/subscribers` | 🔐 Protected | List subscribers |
+| POST | `/admin/subscribers/{id}/suppress` | 🔐 Protected | Suppress subscriber |
 
 🚧 = Returns 501 Not Implemented (infrastructure in place, handler pending)
-🔒 = Returns 401 Unauthorized (admin authentication not yet configured - Milestone 5)
-Admin routes are blocked by a deny-all Lambda authorizer (simple response), so API Gateway returns 401 without a JSON body.
+🔐 = Protected by Cognito authentication (requires valid JWT token + "Administrators" group membership)
+Admin routes return 501 Not Implemented once authorized, as domain handlers are not yet deployed.
 
 ## Prerequisites
 
@@ -140,6 +163,7 @@ The deploying IAM user/role needs permissions for:
 - SES (email identity, configuration sets, event destinations)
 - SNS (topic creation and management)
 - SQS (queue creation and management)
+- Cognito (user pool, client, domain, group management)
 
 Milestone 4 IAM policies are split by service to stay under AWS size limits.
 See `/iam-permissions-milestone4.json` for the policy index and attach all of:
@@ -149,6 +173,9 @@ See `/iam-permissions-milestone4.json` for the policy index and attach all of:
 - `/iam-permissions-milestone4-kms.json`
 - `/iam-permissions-milestone4-lambda.json`
 - `/iam-permissions-milestone4-cloudformation.json`
+
+Milestone 5 adds Cognito permissions:
+- `/iam-permissions-milestone5-cognito.json`
 
 ## Installation
 
@@ -273,6 +300,119 @@ Key outputs:
 - `DeadLetterQueueUrl`: Dead letter queue for failed events
 - `EventHandlerFunctionName`, `EventHandlerFunctionArn`: Lambda function for SES event processing
 - `EncryptionKeyId`, `EncryptionKeyArn` (SES): KMS key for SES event encryption
+- `UserPoolId`, `UserPoolArn`: Cognito User Pool for admin authentication
+- `UserPoolClientId`: Cognito User Pool Client ID
+- `UserPoolDomain`: Cognito User Pool Domain
+- `UserPoolIssuer`: Cognito User Pool Issuer URL (for JWT validation)
+
+## Cognito Admin Authentication
+
+### User Pool Configuration
+
+The Cognito User Pool is configured for maximum security:
+
+```typescript
+{
+  // MFA required for all users (TOTP only)
+  mfa: 'REQUIRED',
+  mfaSecondFactor: { sms: false, otp: true },
+
+  // Strong password policy
+  passwordPolicy: {
+    minLength: 14,
+    requireLowercase: true,
+    requireUppercase: true,
+    requireDigits: true,
+    requireSymbols: true,
+  },
+
+  // Email-only sign-in
+  signInAliases: { email: true, username: false },
+
+  // Self-signup disabled (admin invite only)
+  selfSignUpEnabled: false,
+
+  // Advanced security (prod: ENFORCED, dev: AUDIT)
+  advancedSecurityMode: env === 'prod' ? 'ENFORCED' : 'AUDIT',
+}
+```
+
+### Creating Admin Users
+
+Admin users must be created manually via AWS CLI or Console:
+
+```bash
+# Create admin user
+aws cognito-idp admin-create-user \
+  --user-pool-id <USER_POOL_ID> \
+  --username admin@example.com \
+  --user-attributes Name=email,Value=admin@example.com Name=email_verified,Value=true \
+  --desired-delivery-mediums EMAIL
+
+# Add user to Administrators group
+aws cognito-idp admin-add-user-to-group \
+  --user-pool-id <USER_POOL_ID> \
+  --username admin@example.com \
+  --group-name Administrators
+```
+
+The user will receive an email with a temporary password. On first sign-in:
+1. They must change their password (14+ characters with complexity)
+2. They must set up MFA using an authenticator app (e.g., Google Authenticator, Authy)
+
+### Authentication Flow
+
+Admin routes (`/admin/*`) require authentication:
+
+1. User signs in via mailer.ponton.io UI (OAuth)
+2. Cognito returns JWT tokens (access token + refresh token)
+3. UI includes access token in `Authorization: Bearer <token>` header
+4. API Gateway Lambda authorizer validates:
+   - JWT signature using Cognito public keys
+   - Token expiration
+   - Token issuer
+   - Group membership (must be in "Administrators" group)
+5. If authorized, request proceeds to Lambda handler
+6. If unauthorized, returns 403 Forbidden
+
+### Token Validity
+
+- Access token: 30 minutes
+- ID token: 30 minutes
+- Refresh token: 7 days
+
+The UI should refresh access tokens before expiry using the refresh token.
+
+### Security Logging
+
+All authorization attempts are logged with structured JSON:
+
+```json
+{
+  "event": "AUTHORIZATION_SUCCESS",
+  "path": "/admin/campaigns",
+  "method": "GET",
+  "sourceIp": "192.0.2.1",
+  "userAgent": "Mozilla/5.0...",
+  "username": "admin@example.com",
+  "groups": ["Administrators"],
+  "timestamp": "2025-01-15T10:30:00.000Z"
+}
+```
+
+Failed authorization attempts are logged with reason:
+
+```json
+{
+  "event": "AUTHORIZATION_FAILURE",
+  "path": "/admin/campaigns",
+  "method": "GET",
+  "sourceIp": "192.0.2.1",
+  "userAgent": "Mozilla/5.0...",
+  "reason": "User not in required group: Administrators",
+  "timestamp": "2025-01-15T10:30:00.000Z"
+}
+```
 
 ## Testing
 
@@ -357,6 +497,7 @@ email.ponton.io/
 ├── iam-permissions-milestone4-kms.json             # KMS key permissions
 ├── iam-permissions-milestone4-lambda.json          # Lambda/IAM/Logs permissions
 ├── iam-permissions-milestone4-cloudformation.json  # CloudFormation permissions
+├── iam-permissions-milestone5-cognito.json         # Cognito permissions for Milestone 5
 │
 ├── bin/
 │   └── email-infra.ts                # CDK app entry point

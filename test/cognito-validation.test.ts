@@ -17,6 +17,16 @@ describe('CognitoStack Security Validations', () => {
         sesSandbox: false,
         hostedZoneName: 'ponton.io',
         enableDetailedMonitoring: true,
+        apiGateway: {
+          throttle: {
+            rateLimit: 100,
+            burstLimit: 200,
+          },
+        },
+        waf: {
+          enable: true,
+          adminRateLimit: 10000,
+        },
         dynamodb: {
           enablePointInTimeRecovery: true,
           enableDeletionProtection: true,
@@ -56,6 +66,16 @@ describe('CognitoStack Security Validations', () => {
         sesSandbox: false,
         hostedZoneName: 'ponton.io',
         enableDetailedMonitoring: true,
+        apiGateway: {
+          throttle: {
+            rateLimit: 100,
+            burstLimit: 200,
+          },
+        },
+        waf: {
+          enable: true,
+          adminRateLimit: 10000,
+        },
         dynamodb: {
           enablePointInTimeRecovery: true,
           enableDeletionProtection: true,
@@ -94,6 +114,16 @@ describe('CognitoStack Security Validations', () => {
         sesSandbox: false,
         hostedZoneName: 'ponton.io',
         enableDetailedMonitoring: true,
+        apiGateway: {
+          throttle: {
+            rateLimit: 100,
+            burstLimit: 200,
+          },
+        },
+        waf: {
+          enable: true,
+          adminRateLimit: 10000,
+        },
         dynamodb: {
           enablePointInTimeRecovery: true,
           enableDeletionProtection: true,
@@ -133,6 +163,16 @@ describe('CognitoStack Security Validations', () => {
         sesSandbox: false,
         hostedZoneName: 'ponton.io',
         enableDetailedMonitoring: true,
+        apiGateway: {
+          throttle: {
+            rateLimit: 100,
+            burstLimit: 200,
+          },
+        },
+        waf: {
+          enable: true,
+          adminRateLimit: 10000,
+        },
         dynamodb: {
           enablePointInTimeRecovery: true,
           enableDeletionProtection: true,
@@ -169,6 +209,16 @@ describe('CognitoStack Security Validations', () => {
         sesSandbox: true,
         hostedZoneName: 'ponton.io',
         enableDetailedMonitoring: false,
+        apiGateway: {
+          throttle: {
+            rateLimit: 20,
+            burstLimit: 40,
+          },
+        },
+        waf: {
+          enable: false,
+          adminRateLimit: 10000,
+        },
         dynamodb: {
           enablePointInTimeRecovery: false,
           enableDeletionProtection: false,

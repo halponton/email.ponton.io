@@ -28,6 +28,34 @@ export interface EnvironmentConfig {
   readonly enableDetailedMonitoring: boolean;
 
   /**
+   * API Gateway throttling configuration
+   */
+  readonly apiGateway: {
+    /**
+     * Stage-level throttling limits (requests per second)
+     */
+    readonly throttle: {
+      readonly rateLimit: number;
+      readonly burstLimit: number;
+    };
+  };
+
+  /**
+   * WAF configuration
+   */
+  readonly waf: {
+    /**
+     * Whether to enable WAF rate-based protection
+     */
+    readonly enable: boolean;
+
+    /**
+     * Rate limit per 5-minute period per IP for /admin paths
+     */
+    readonly adminRateLimit: number;
+  };
+
+  /**
    * DynamoDB configuration
    */
   readonly dynamodb: {
@@ -108,6 +136,16 @@ export const DEV_CONFIG: EnvironmentConfig = {
   sesSandbox: true,
   hostedZoneName: 'ponton.io',
   enableDetailedMonitoring: false,
+  apiGateway: {
+    throttle: {
+      rateLimit: 20,
+      burstLimit: 40,
+    },
+  },
+  waf: {
+    enable: false,
+    adminRateLimit: 10000,
+  },
   dynamodb: {
     enablePointInTimeRecovery: false, // Cost optimization for dev
     enableDeletionProtection: false, // Development flexibility
@@ -143,6 +181,16 @@ export const PROD_CONFIG: EnvironmentConfig = {
   sesSandbox: false,
   hostedZoneName: 'ponton.io',
   enableDetailedMonitoring: true,
+  apiGateway: {
+    throttle: {
+      rateLimit: 100,
+      burstLimit: 200,
+    },
+  },
+  waf: {
+    enable: true,
+    adminRateLimit: 10000,
+  },
   dynamodb: {
     enablePointInTimeRecovery: true, // Data protection for prod
     enableDeletionProtection: true, // Prevent accidental deletion

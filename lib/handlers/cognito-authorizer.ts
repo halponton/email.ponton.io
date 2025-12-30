@@ -62,6 +62,20 @@ const verifier = CognitoJwtVerifier.create({
   clientId: CLIENT_ID,
 });
 
+type AuthFailureReasonCode =
+  | 'AUTH_MISSING_HEADER'
+  | 'AUTH_HEADER_TOO_LARGE'
+  | 'AUTH_HEADER_FORMAT_INVALID'
+  | 'AUTH_TOKEN_TOO_LARGE'
+  | 'AUTH_TOKEN_FORMAT_INVALID'
+  | 'AUTH_JWT_VERIFY_FAILED'
+  | 'AUTH_GROUP_FORBIDDEN'
+  | 'AUTH_UNEXPECTED_ERROR';
+
+type TokenExtractionResult =
+  | { token: string }
+  | { errorCode: AuthFailureReasonCode; reason: string };
+
 /**
  * Structured log for security events
  */
@@ -74,6 +88,7 @@ interface SecurityLogEvent {
   username?: string;
   groups?: string[];
   reason?: string;
+  reasonCode?: AuthFailureReasonCode;
   timestamp: string;
 }
 
@@ -88,9 +103,12 @@ function logSecurityEvent(event: SecurityLogEvent): void {
  * Extract token from Authorization header
  * H-3: Includes validation of token size and format to prevent DoS attacks
  */
-function extractToken(authHeader: string | undefined): string | null {
+function extractToken(authHeader: string | undefined): TokenExtractionResult {
   if (!authHeader) {
-    return null;
+    return {
+      errorCode: 'AUTH_MISSING_HEADER',
+      reason: 'Missing Authorization header',
+    };
   }
 
   // Validate header size before processing
@@ -99,13 +117,19 @@ function extractToken(authHeader: string | undefined): string | null {
       length: authHeader.length,
       maxLength: MAX_HEADER_LENGTH,
     });
-    return null;
+    return {
+      errorCode: 'AUTH_HEADER_TOO_LARGE',
+      reason: 'Authorization header exceeds maximum length',
+    };
   }
 
   // Expected format: "Bearer <token>" (case-insensitive, allow extra whitespace)
   const match = authHeader.trim().match(/^Bearer\s+(.+)$/i);
   if (!match) {
-    return null;
+    return {
+      errorCode: 'AUTH_HEADER_FORMAT_INVALID',
+      reason: 'Authorization header is not a Bearer token',
+    };
   }
 
   const token = match[1].trim();
@@ -116,17 +140,23 @@ function extractToken(authHeader: string | undefined): string | null {
       length: token.length,
       maxLength: MAX_TOKEN_LENGTH,
     });
-    return null;
+    return {
+      errorCode: 'AUTH_TOKEN_TOO_LARGE',
+      reason: 'Token exceeds maximum length',
+    };
   }
 
   // Validate JWT format (three base64url parts separated by dots)
   // Base64url character set: A-Z, a-z, 0-9, hyphen, underscore
   if (!/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token)) {
     console.warn('Token does not match JWT format');
-    return null;
+    return {
+      errorCode: 'AUTH_TOKEN_FORMAT_INVALID',
+      reason: 'Token does not match JWT format',
+    };
   }
 
-  return token;
+  return { token };
 }
 
 /**
@@ -179,16 +209,17 @@ export const handler = async (
   try {
     // Extract Authorization header
     const authHeader = event.headers?.authorization || event.headers?.Authorization;
-    const token = extractToken(authHeader);
+    const tokenResult = extractToken(authHeader);
 
-    if (!token) {
+    if ('errorCode' in tokenResult) {
       logSecurityEvent({
         event: 'AUTHORIZATION_FAILURE',
         path,
         method,
         sourceIp,
         userAgent,
-        reason: 'Missing or invalid Authorization header',
+        reason: tokenResult.reason,
+        reasonCode: tokenResult.errorCode,
         timestamp,
       });
 
@@ -196,6 +227,7 @@ export const handler = async (
     }
 
     // Verify JWT token
+    const { token } = tokenResult;
     let payload;
     try {
       payload = await verifier.verify(token);
@@ -208,6 +240,7 @@ export const handler = async (
         sourceIp,
         userAgent,
         reason: `JWT verification failed: ${errorMessage}`,
+        reasonCode: 'AUTH_JWT_VERIFY_FAILED',
         timestamp,
       });
 
@@ -229,6 +262,7 @@ export const handler = async (
         username,
         groups,
         reason: `User not in required group: ${REQUIRED_GROUP}`,
+        reasonCode: 'AUTH_GROUP_FORBIDDEN',
         timestamp,
       });
 
@@ -271,6 +305,7 @@ export const handler = async (
       sourceIp,
       userAgent,
       reason: `Unexpected error: ${errorMessage}`,
+      reasonCode: 'AUTH_UNEXPECTED_ERROR',
       timestamp,
     });
 

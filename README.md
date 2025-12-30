@@ -103,10 +103,24 @@ Per **PLATFORM_INVARIANTS.md** section 3:
 - Lambda authorizer for admin routes
   - JWT verification using aws-jwt-verify library
   - Group membership enforcement (must be in "Administrators")
-  - Structured security logging for all authorization attempts
+  - Structured security logging for all authorization attempts (includes failure reason codes)
   - Authorization cache disabled (per-route IAM policy safety)
+- API Gateway stage throttling (rate/burst limits per environment)
+- WAF rate-based protection for /admin routes (prod only)
 - Email via SES (admin@email.ponton.io for prod, admin-dev@email.ponton.io for dev)
 - Stack outputs for UI integration (User Pool ID, Client ID, Domain, Issuer)
+
+### Token Revocation (Cognito)
+
+- Token revocation is enabled on the User Pool Client.
+- Cognito revocation primarily affects refresh tokens; access tokens remain valid until expiry (30 minutes).
+- For incident response: remove the user from the Administrators group and call `AdminUserGlobalSignOut` (or user `GlobalSignOut`) to prevent new access tokens.
+
+### Rate Limiting
+
+- API Gateway stage throttling applies to all routes (requests per second).
+- WAF rate-based rule applies to `/admin` paths in prod (per-IP requests over 5 minutes).
+- Tune values in `lib/config/environments.ts`.
 
 **Future Milestones:**
 - Milestone 6: Observability and retention jobs
@@ -164,6 +178,7 @@ The deploying IAM user/role needs permissions for:
 - SNS (topic creation and management)
 - SQS (queue creation and management)
 - Cognito (user pool, client, domain, group management)
+- WAFv2 (Web ACLs and associations for rate limiting)
 
 Milestone 4 IAM policies are split by service to stay under AWS size limits.
 See `/iam-permissions-milestone4.json` for the policy index and attach all of:
@@ -195,6 +210,7 @@ npm run build
 Environment configuration is in `lib/config/environments.ts`:
 
 ```typescript
+// apiGateway and waf blocks are required in EnvironmentConfig
 // Dev environment
 {
   env: 'dev',
@@ -203,6 +219,16 @@ Environment configuration is in `lib/config/environments.ts`:
   sesSandbox: true,
   hostedZoneName: 'ponton.io',
   enableDetailedMonitoring: false,
+  apiGateway: {
+    throttle: {
+      rateLimit: 20,
+      burstLimit: 40,
+    },
+  },
+  waf: {
+    enable: false,
+    adminRateLimit: 10000,
+  },
   dynamodb: {
     enablePointInTimeRecovery: false,  // Cost optimization
     enableDeletionProtection: false,   // Development flexibility
@@ -220,6 +246,16 @@ Environment configuration is in `lib/config/environments.ts`:
   sesSandbox: false,
   hostedZoneName: 'ponton.io',
   enableDetailedMonitoring: true,
+  apiGateway: {
+    throttle: {
+      rateLimit: 100,
+      burstLimit: 200,
+    },
+  },
+  waf: {
+    enable: true,
+    adminRateLimit: 10000,
+  },
   dynamodb: {
     enablePointInTimeRecovery: true,   // Data protection
     enableDeletionProtection: true,    // Prevent accidental deletion

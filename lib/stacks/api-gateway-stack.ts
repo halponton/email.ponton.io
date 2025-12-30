@@ -4,6 +4,7 @@ import * as apigatewayv2Authorizers from 'aws-cdk-lib/aws-apigatewayv2-authorize
 import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as route53 from 'aws-cdk-lib/aws-route53';
 import * as route53Targets from 'aws-cdk-lib/aws-route53-targets';
+import * as wafv2 from 'aws-cdk-lib/aws-wafv2';
 import { Construct } from 'constructs';
 import { EnvironmentConfig, envResourceName } from '../config/environments';
 import { StandardLambdaFunction } from '../constructs/lambda-function';
@@ -71,6 +72,9 @@ export class ApiGatewayStack extends cdk.Stack {
 
   /** Custom domain for the API */
   public readonly customDomain: apigatewayv2.DomainName;
+
+  /** Default stage with throttling */
+  public readonly httpStage: apigatewayv2.HttpStage;
 
   /** Health check Lambda function */
   public readonly healthFunction: StandardLambdaFunction;
@@ -156,7 +160,22 @@ export class ApiGatewayStack extends cdk.Stack {
           allowHeaders: ['Content-Type', 'Authorization'],
           maxAge: cdk.Duration.hours(1),
         },
-        createDefaultStage: true,
+        createDefaultStage: false,
+      }
+    );
+
+    this.httpStage = new apigatewayv2.HttpStage(
+      this,
+      envResourceName(config.env, 'DefaultStage'),
+      {
+        httpApi: this.httpApi,
+        stageName: '$default',
+        autoDeploy: true,
+        throttle: {
+          rateLimit: config.apiGateway.throttle.rateLimit,
+          burstLimit: config.apiGateway.throttle.burstLimit,
+        },
+        detailedMetricsEnabled: config.enableDetailedMonitoring,
       }
     );
 
@@ -177,9 +196,65 @@ export class ApiGatewayStack extends cdk.Stack {
       {
         api: this.httpApi,
         domainName: this.customDomain,
-        stage: this.httpApi.defaultStage,
+        stage: this.httpStage,
       }
     );
+
+    if (config.waf.enable) {
+      const webAcl = new wafv2.CfnWebACL(this, envResourceName(config.env, 'ApiWebAcl'), {
+        name: envResourceName(config.env, 'api-web-acl'),
+        scope: 'REGIONAL',
+        defaultAction: { allow: {} },
+        visibilityConfig: {
+          cloudWatchMetricsEnabled: true,
+          metricName: envResourceName(config.env, 'ApiWebAcl'),
+          sampledRequestsEnabled: true,
+        },
+        rules: [
+          {
+            name: envResourceName(config.env, 'AdminRateLimit'),
+            priority: 0,
+            action: { block: {} },
+            statement: {
+              rateBasedStatement: {
+                limit: config.waf.adminRateLimit,
+                aggregateKeyType: 'IP',
+                scopeDownStatement: {
+                  byteMatchStatement: {
+                    fieldToMatch: { uriPath: {} },
+                    positionalConstraint: 'STARTS_WITH',
+                    searchString: '/admin',
+                    textTransformations: [
+                      {
+                        priority: 0,
+                        type: 'NONE',
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+            visibilityConfig: {
+              cloudWatchMetricsEnabled: true,
+              metricName: envResourceName(config.env, 'AdminRateLimit'),
+              sampledRequestsEnabled: true,
+            },
+          },
+        ],
+      });
+
+      const partition = cdk.Stack.of(this).partition;
+      const apiStageArn = `arn:${partition}:apigateway:${cdk.Stack.of(this).region}::/apis/${this.httpApi.apiId}/stages/${this.httpStage.stageName}`;
+
+      new wafv2.CfnWebACLAssociation(
+        this,
+        envResourceName(config.env, 'ApiWebAclAssociation'),
+        {
+          resourceArn: apiStageArn,
+          webAclArn: webAcl.attrArn,
+        }
+      );
+    }
 
     // Create Route53 alias record
     new route53.ARecord(this, envResourceName(config.env, 'AliasRecord'), {

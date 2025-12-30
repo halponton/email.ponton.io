@@ -4,6 +4,7 @@ import * as cdk from 'aws-cdk-lib';
 import { CertificateStack } from '../lib/stacks/certificate-stack';
 import { DynamoDBStack } from '../lib/stacks/dynamodb-stack';
 import { SecretsStack } from '../lib/stacks/secrets-stack';
+import { SESStack } from '../lib/stacks/ses-stack';
 import { ApiGatewayStack } from '../lib/stacks/api-gateway-stack';
 import { getEnvironmentConfig } from '../lib/config/environments';
 
@@ -36,6 +37,14 @@ import { getEnvironmentConfig } from '../lib/config/environments';
  * - SSM Parameter Store for non-secret configuration (SES, API, tracking, retention)
  * - Dedicated CMK encryption for Secrets Manager
  * - Environment-scoped naming and distinct values per environment
+ *
+ * Milestone 4: SES Configuration
+ * - SES Email Identity for email.ponton.io with DKIM, SPF, DMARC
+ * - SES Configuration Set (environment-scoped)
+ * - Event destination pipeline: SNS → SQS → Lambda → DynamoDB
+ * - Dead Letter Queue for failed events
+ * - Lambda handler for processing delivery, bounce, complaint, reject events
+ * - Dedicated KMS key for SES event encryption
  */
 
 const app = new cdk.App();
@@ -62,6 +71,7 @@ const env = {
 const certificateStackName = `${config.env}-email-certificate`;
 const dynamodbStackName = `${config.env}-email-dynamodb`;
 const secretsStackName = `${config.env}-email-secrets`;
+const sesStackName = `${config.env}-email-ses`;
 const apiGatewayStackName = `${config.env}-email-api-gateway`;
 
 /**
@@ -105,6 +115,27 @@ const secretsStack = new SecretsStack(app, secretsStackName, {
 });
 
 /**
+ * SES Stack
+ *
+ * Creates SES configuration for email sending.
+ * Depends on Certificate Stack for Route53 hosted zone and DynamoDB Stack for tables.
+ * Independent of API Gateway Stack and Secrets Stack.
+ */
+const sesStack = new SESStack(app, sesStackName, {
+  env,
+  config,
+  hostedZone: certificateStack.hostedZone,
+  tables: {
+    subscribersTable: dynamodbStack.tables.subscribersTable,
+    auditEventsTable: dynamodbStack.tables.auditEventsTable,
+    engagementEventsTable: dynamodbStack.tables.engagementEventsTable,
+    deliveriesTable: dynamodbStack.tables.deliveriesTable,
+  },
+  description: `SES configuration for email.ponton.io (${config.env})`,
+  stackName: sesStackName,
+});
+
+/**
  * API Gateway Stack
  *
  * Depends on Certificate Stack for ACM certificate and Route53 hosted zone.
@@ -125,6 +156,9 @@ const apiGatewayStack = new ApiGatewayStack(app, apiGatewayStackName, {
 });
 
 // Explicit dependencies
+sesStack.addDependency(certificateStack);
+sesStack.addDependency(dynamodbStack);
+
 apiGatewayStack.addDependency(certificateStack);
 apiGatewayStack.addDependency(dynamodbStack);
 apiGatewayStack.addDependency(secretsStack);

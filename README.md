@@ -67,8 +67,22 @@ Per **PLATFORM_INVARIANTS.md** section 3:
 - Secrets generated automatically at deployment time
 - 7 SSM parameters for SES config, API config, tracking config, and retention config
 
+**Milestone 4: SES Configuration** ✅ Complete
+- SES Email Identity for email.ponton.io with DKIM, SPF, DMARC
+- SES Configuration Set (environment-scoped: dev-email-ses-config, prod-email-ses-config)
+- Event destination pipeline: SNS → SQS → Lambda → DynamoDB
+- Dead Letter Queue for failed events (14-day retention)
+- Lambda handler for processing delivery, bounce, complaint, reject events
+- Dedicated KMS key for SES event encryption (separate from DynamoDB keys)
+- Least privilege IAM: Event processor Lambda has NO ses:SendEmail permission
+- SNS message signature verification in Lambda (per PLATFORM_INVARIANTS.md)
+- Partial batch failure support for SQS events
+- DKIM: AWS Easy DKIM (2048-bit keys, automatic rotation)
+- SPF: Hard fail policy (-all)
+- DMARC: Monitoring mode (p=none, upgrade to p=quarantine/reject later)
+- MAIL FROM domain: bounce.email.ponton.io (MX + SPF records in Route53)
+
 **Future Milestones:**
-- Milestone 4: SES configuration
 - Milestone 5: Cognito for admin APIs
 - Milestone 6: Observability and retention jobs
 
@@ -113,14 +127,19 @@ The deploying IAM user/role needs permissions for:
 - CloudFormation (create/update/delete stacks)
 - ACM (certificate management)
 - API Gateway v2 (HTTP APIs)
-- Lambda (function management)
-- Route53 (DNS records)
+- Lambda (function management, event source mappings)
+- Route53 (DNS records, hosted zone lookup)
 - IAM (role creation for Lambda)
 - CloudWatch Logs (log group management)
 - DynamoDB (table and GSI management)
 - KMS (key creation and management for encryption)
 - Secrets Manager (secret creation and management)
 - SSM Parameter Store (parameter creation and management)
+- SES (email identity, configuration sets, event destinations)
+- SNS (topic creation and management)
+- SQS (queue creation and management)
+
+See `/iam-permissions-milestone4.json` for detailed Milestone 4 IAM permissions
 
 ## Installation
 
@@ -238,6 +257,13 @@ Key outputs:
 - `SesVerifiedDomainParameter`, `SesFromEmailParameter`, `SesFromNameParameter`: SES configuration parameters
 - `ApiBaseUrlParameter`, `ClickRedirectBaseUrlParameter`, `OpenPixelBaseUrlParameter`: API and tracking parameters
 - `EngagementTtlDaysParameter`: Engagement events TTL configuration
+- `EmailIdentityName`: SES verified domain (email.ponton.io)
+- `ConfigurationSetName`: SES configuration set name (dev-email-ses-config or prod-email-ses-config)
+- `EventTopicArn`: SNS topic ARN for SES events
+- `EventQueueUrl`, `EventQueueArn`: SQS queue for SES events
+- `DeadLetterQueueUrl`: Dead letter queue for failed events
+- `EventHandlerFunctionName`, `EventHandlerFunctionArn`: Lambda function for SES event processing
+- `EncryptionKeyId`, `EncryptionKeyArn` (SES): KMS key for SES event encryption
 
 ## Testing
 
@@ -307,59 +333,79 @@ curl -X GET https://api-dev.email.ponton.io/admin/campaigns
 
 ```
 email.ponton.io/
-├── README.md                     # This file
-├── PLATFORM_INVARIANTS.md        # Platform-wide rules (source of truth)
-├── plans.md                      # Milestone plan
-├── agents.md                     # Agent guidelines
-├── package.json                  # NPM dependencies
-├── tsconfig.json                 # TypeScript configuration
-├── cdk.json                      # CDK configuration
-├── .gitignore                    # Git ignore rules
+├── README.md                          # This file
+├── PLATFORM_INVARIANTS.md             # Platform-wide rules (source of truth)
+├── plans.md                           # Milestone plan
+├── agents.md                          # Agent guidelines
+├── package.json                       # NPM dependencies
+├── tsconfig.json                      # TypeScript configuration
+├── cdk.json                           # CDK configuration
+├── .gitignore                         # Git ignore rules
+├── iam-permissions-milestone4.json    # IAM permissions for Milestone 4 deployment
 │
 ├── bin/
-│   └── email-infra.ts           # CDK app entry point
+│   └── email-infra.ts                # CDK app entry point
 │
 ├── lib/
 │   ├── config/
-│   │   └── environments.ts      # Environment configuration (dev/prod)
+│   │   └── environments.ts           # Environment configuration (dev/prod)
 │   │
 │   ├── stacks/
-│   │   ├── certificate-stack.ts # ACM certificate stack
-│   │   ├── dynamodb-stack.ts    # DynamoDB tables stack
-│   │   ├── secrets-stack.ts     # Secrets Manager and SSM parameters stack
-│   │   └── api-gateway-stack.ts # API Gateway and routes stack
+│   │   ├── certificate-stack.ts      # ACM certificate stack
+│   │   ├── dynamodb-stack.ts         # DynamoDB tables stack
+│   │   ├── secrets-stack.ts          # Secrets Manager and SSM parameters stack
+│   │   ├── ses-stack.ts              # SES configuration stack (Milestone 4)
+│   │   └── api-gateway-stack.ts      # API Gateway and routes stack
 │   │
 │   ├── constructs/
-│   │   ├── lambda-function.ts   # Standardized Lambda construct
-│   │   ├── api-routes.ts        # API Gateway routes construct
-│   │   ├── dynamodb-tables.ts   # DynamoDB tables construct
-│   │   ├── secrets.ts           # Secrets Manager construct
-│   │   └── ssm-parameters.ts    # SSM Parameter Store construct
+│   │   ├── lambda-function.ts        # Standardized Lambda construct
+│   │   ├── api-routes.ts             # API Gateway routes construct
+│   │   ├── dynamodb-tables.ts        # DynamoDB tables construct
+│   │   ├── secrets.ts                # Secrets Manager construct
+│   │   ├── ssm-parameters.ts         # SSM Parameter Store construct
+│   │   ├── ses-identity.ts           # SES email identity with DKIM/SPF/DMARC
+│   │   ├── ses-configuration-set.ts  # SES configuration set
+│   │   └── ses-event-destination.ts  # SNS/SQS/Lambda event pipeline
 │   │
 │   └── handlers/
-│       ├── health.ts            # Health check handler
-│       ├── not-implemented.ts   # Placeholder handler (501)
-│       └── admin-authorizer.ts  # Placeholder admin authorizer (401)
+│       ├── health.ts                 # Health check handler
+│       ├── not-implemented.ts        # Placeholder handler (501)
+│       ├── admin-authorizer.ts       # Placeholder admin authorizer (401)
+│       └── ses-event-handler.ts      # SES event processor (delivery, bounce, complaint)
 │
-└── ponton.io_email_service/     # Domain logic (separate repo)
+├── scripts/
+│   └── deploy-milestone4-dev.sh      # Milestone 4 deployment script (dev only)
+│
+├── test/
+│   ├── dynamodb-stack.test.ts        # DynamoDB stack tests
+│   ├── secrets-stack.test.ts         # Secrets stack tests
+│   └── ses-stack.test.ts             # SES stack tests (Milestone 4)
+│
+└── ponton.io_email_service/          # Domain logic (separate repo)
 ```
 
 ## Stack Dependencies
 
 ```
-dev-email-certificate ───────┐
-dev-email-dynamodb ──────────┼──> dev-email-api-gateway
+dev-email-certificate ───────┬──> dev-email-api-gateway
+                             │
+dev-email-dynamodb ──────────┼──> dev-email-ses
+                             │
 dev-email-secrets ───────────┘
 ```
 
 Stack dependencies:
+- **SES Stack** depends on:
+  - Certificate stack (for Route53 hosted zone)
+  - DynamoDB stack (for table references for event processing)
+
 - **API Gateway Stack** depends on:
   - Certificate stack (for ACM certificate and Route53 hosted zone)
   - DynamoDB stack (for table references and IAM permissions)
   - Secrets stack (for secrets and parameters access)
 
 Certificate, DynamoDB, and Secrets stacks can be deployed in parallel.
-API Gateway stack must be deployed last (depends on all others).
+SES and API Gateway stacks can be deployed in parallel (both depend on Certificate and DynamoDB).
 
 ## Environment Variables
 
@@ -648,22 +694,118 @@ cdk destroy --all --context environment=prod
 
 **Note**: This deletes all AWS resources but preserves Route53 hosted zone.
 
+## SES Configuration
+
+### Email Identity Verification
+
+After deploying the SES stack, verify the email identity status:
+
+```bash
+# Check SES identity verification status
+aws ses get-email-identity \
+  --email-identity email.ponton.io \
+  --region eu-west-2 \
+  --query 'VerifiedForSendingStatus'
+```
+
+Verification typically completes within a few hours, but can take up to 72 hours. The SES stack creates:
+- DKIM CNAME records (automatic verification)
+- SPF TXT record (v=spf1 include:amazonses.com -all)
+- DMARC TXT record (_dmarc.email.ponton.io)
+
+### SES Event Processing
+
+The SES event pipeline processes the following events:
+- **SEND**: Email accepted by SES
+- **DELIVERY**: Email delivered successfully
+- **BOUNCE**: Email bounced (hard/soft)
+- **COMPLAINT**: Recipient marked as spam
+- **REJECT**: SES rejected email (invalid recipient, suppression)
+
+Events flow through: SES → SNS Topic → SQS Queue → Lambda Handler → DynamoDB
+
+### Monitoring SES Events
+
+```bash
+# Check SQS queue depth
+aws sqs get-queue-attributes \
+  --queue-url $(aws cloudformation describe-stacks \
+    --stack-name dev-email-ses \
+    --query 'Stacks[0].Outputs[?OutputKey==`EventQueueUrl`].OutputValue' \
+    --output text) \
+  --attribute-names ApproximateNumberOfMessages \
+  --region eu-west-2
+
+# Check DLQ depth (should be 0)
+aws sqs get-queue-attributes \
+  --queue-url $(aws cloudformation describe-stacks \
+    --stack-name dev-email-ses \
+    --query 'Stacks[0].Outputs[?OutputKey==`DeadLetterQueueUrl`].OutputValue' \
+    --output text) \
+  --attribute-names ApproximateNumberOfMessages \
+  --region eu-west-2
+
+# View Lambda logs
+aws logs tail /aws/lambda/dev-email-ses-event-processor \
+  --follow \
+  --region eu-west-2
+```
+
+### DMARC Policy Evolution
+
+The DMARC record starts with `p=none` (monitoring mode). Upgrade to stricter policies after monitoring:
+
+1. **p=none** (current): Monitor and collect reports for 30 days
+2. **p=quarantine**: After 30 days, quarantine suspicious emails for 30 days
+3. **p=reject**: After 60 days, reject unauthorized emails
+
+Update DMARC record manually or redeploy stack with updated policy.
+
+### SES Sandbox Mode
+
+**Dev environment** runs in SES sandbox mode:
+- Can only send to verified email addresses
+- Request production access from AWS SES console when ready
+- Max 200 emails per 24 hours in sandbox
+
+**Prod environment** should request production access:
+1. AWS SES console → Account dashboard → Request production access
+2. Provide use case description (newsletter platform)
+3. Approval typically within 24 hours
+
+## Deployment Scripts
+
+### Milestone 4 Deployment (Dev)
+
+The deployment script for Milestone 4 is provided at `/scripts/deploy-milestone4-dev.sh`.
+
+**IMPORTANT**: The script is NOT executable in this PR. After review and merge, make it executable:
+
+```bash
+chmod +x scripts/deploy-milestone4-dev.sh
+./scripts/deploy-milestone4-dev.sh
+```
+
+The script performs:
+- Pre-deployment checks (AWS CLI, Node.js, dependencies)
+- Prerequisite stack verification (Certificate, DynamoDB)
+- Test execution
+- Template synthesis
+- Stack deployment
+- Post-deployment verification (SES identity, SNS, SQS, Lambda)
+
 ## Next Steps
 
-After Milestone 3 completion:
+After Milestone 4 completion:
 
-1. **Milestone 4**: Set up SES configuration
-   - Verify `email.ponton.io` domain
-   - Configure SNS topics for bounce/complaint handling
-   - Set up configuration sets
-
-2. **Milestone 5**: Implement Cognito
+1. **Milestone 5**: Implement Cognito
    - Admin user pool
    - API Gateway JWT authorizers
 
-3. **Milestone 6**: Observability and retention
+2. **Milestone 6**: Observability and retention
    - CloudWatch dashboards
    - Monitoring alarms for table metrics
+   - DLQ monitoring alerts
 
 ## Contributing
 

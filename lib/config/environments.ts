@@ -54,6 +54,33 @@ export interface EnvironmentConfig {
      */
     readonly retainOnDelete: boolean;
   };
+
+  /**
+   * SES configuration
+   */
+  readonly ses: {
+    /**
+     * SES verified domain for sending emails
+     */
+    readonly verifiedDomain: string;
+
+    /**
+     * Configuration set name (environment-scoped)
+     */
+    readonly configurationSetName: string;
+
+    /**
+     * Whether to enable DKIM signing
+     * Recommended: true for both dev and prod (email deliverability)
+     */
+    readonly enableDkim: boolean;
+
+    /**
+     * Whether to enable SNS notifications for SES events
+     * Recommended: true for both dev and prod (bounce/complaint handling)
+     */
+    readonly enableEventNotifications: boolean;
+  };
 }
 
 /**
@@ -73,6 +100,12 @@ export const DEV_CONFIG: EnvironmentConfig = {
   secrets: {
     retainOnDelete: false, // Clean deletion for dev
   },
+  ses: {
+    verifiedDomain: 'email.ponton.io',
+    configurationSetName: 'dev-email-ses-config',
+    enableDkim: true, // Email deliverability
+    enableEventNotifications: true, // Bounce/complaint handling
+  },
 };
 
 /**
@@ -91,6 +124,12 @@ export const PROD_CONFIG: EnvironmentConfig = {
   },
   secrets: {
     retainOnDelete: true, // Prevent accidental secret deletion in prod
+  },
+  ses: {
+    verifiedDomain: 'email.ponton.io',
+    configurationSetName: 'prod-email-ses-config',
+    enableDkim: true, // Email deliverability
+    enableEventNotifications: true, // Bounce/complaint handling
   },
 };
 

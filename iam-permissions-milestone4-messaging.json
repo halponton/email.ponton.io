@@ -1,0 +1,43 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "SNSTopicManagement",
+      "Effect": "Allow",
+      "Action": [
+        "sns:CreateTopic",
+        "sns:DeleteTopic",
+        "sns:GetTopicAttributes",
+        "sns:SetTopicAttributes",
+        "sns:Subscribe",
+        "sns:Unsubscribe",
+        "sns:ListSubscriptionsByTopic",
+        "sns:TagResource",
+        "sns:UntagResource"
+      ],
+      "Resource": [
+        "arn:aws:sns:eu-west-2:*:dev-email-ses-events",
+        "arn:aws:sns:eu-west-2:*:prod-email-ses-events"
+      ]
+    },
+    {
+      "Sid": "SQSQueueManagement",
+      "Effect": "Allow",
+      "Action": [
+        "sqs:CreateQueue",
+        "sqs:DeleteQueue",
+        "sqs:GetQueueAttributes",
+        "sqs:SetQueueAttributes",
+        "sqs:GetQueueUrl",
+        "sqs:TagQueue",
+        "sqs:UntagQueue"
+      ],
+      "Resource": [
+        "arn:aws:sqs:eu-west-2:*:dev-email-ses-events",
+        "arn:aws:sqs:eu-west-2:*:dev-email-ses-events-dlq",
+        "arn:aws:sqs:eu-west-2:*:prod-email-ses-events",
+        "arn:aws:sqs:eu-west-2:*:prod-email-ses-events-dlq"
+      ]
+    }
+  ]
+}

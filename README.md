@@ -73,11 +73,13 @@ Per **PLATFORM_INVARIANTS.md** section 3:
 - Event destination pipeline: SNS → SQS → Lambda → DynamoDB
 - Dead Letter Queue for failed events (14-day retention)
 - Lambda handler for processing delivery, bounce, complaint, reject events
-- Dedicated KMS key for SES event encryption (separate from DynamoDB keys)
+- Dedicated KMS keys for SNS and SQS event encryption (separate from DynamoDB keys)
+- SNS CMK policy scopes access via `kms:ViaService` for SES/SNS publishing
 - Least privilege IAM: Event processor Lambda has NO ses:SendEmail permission
 - SNS message signature verification in Lambda (per PLATFORM_INVARIANTS.md)
 - Partial batch failure support for SQS events
 - DKIM: AWS Easy DKIM (2048-bit keys, automatic rotation)
+- DKIM CNAME records use SES token FQDNs to avoid duplicate zone suffixes
 - SPF: Hard fail policy (-all)
 - DMARC: Monitoring mode (p=none, upgrade to p=quarantine/reject later)
 - MAIL FROM domain: bounce.email.ponton.io (MX + SPF records in Route53)
@@ -139,7 +141,14 @@ The deploying IAM user/role needs permissions for:
 - SNS (topic creation and management)
 - SQS (queue creation and management)
 
-See `/iam-permissions-milestone4.json` for detailed Milestone 4 IAM permissions
+Milestone 4 IAM policies are split by service to stay under AWS size limits.
+See `/iam-permissions-milestone4.json` for the policy index and attach all of:
+- `/iam-permissions-milestone4-ses.json`
+- `/iam-permissions-milestone4-route53.json`
+- `/iam-permissions-milestone4-messaging.json`
+- `/iam-permissions-milestone4-kms.json`
+- `/iam-permissions-milestone4-lambda.json`
+- `/iam-permissions-milestone4-cloudformation.json`
 
 ## Installation
 
@@ -341,7 +350,13 @@ email.ponton.io/
 ├── tsconfig.json                      # TypeScript configuration
 ├── cdk.json                           # CDK configuration
 ├── .gitignore                         # Git ignore rules
-├── iam-permissions-milestone4.json    # IAM permissions for Milestone 4 deployment
+├── iam-permissions-milestone4.json                 # Index of Milestone 4 IAM policies
+├── iam-permissions-milestone4-ses.json             # SES identity/configuration permissions
+├── iam-permissions-milestone4-route53.json         # Route53 DNS permissions
+├── iam-permissions-milestone4-messaging.json       # SNS/SQS permissions
+├── iam-permissions-milestone4-kms.json             # KMS key permissions
+├── iam-permissions-milestone4-lambda.json          # Lambda/IAM/Logs permissions
+├── iam-permissions-milestone4-cloudformation.json  # CloudFormation permissions
 │
 ├── bin/
 │   └── email-infra.ts                # CDK app entry point

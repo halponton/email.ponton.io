@@ -271,11 +271,11 @@ describe('SESStack', () => {
       expect((mainQueue as any).Properties.RedrivePolicy.maxReceiveCount).toBe(3);
     });
 
-    test('creates dedicated KMS key for SES events', () => {
+    test('creates dedicated KMS keys for SES events', () => {
       const stack = makeStack(DEV_CONFIG, 'DevSESStack');
       const template = Template.fromStack(stack);
 
-      template.resourceCountIs('AWS::KMS::Key', 1);
+      template.resourceCountIs('AWS::KMS::Key', 2);
 
       template.hasResourceProperties('AWS::KMS::Key', {
         EnableKeyRotation: true,
@@ -284,9 +284,13 @@ describe('SESStack', () => {
       template.hasResourceProperties('AWS::KMS::Alias', {
         AliasName: 'alias/dev-email-ses-events-key',
       });
+
+      template.hasResourceProperties('AWS::KMS::Alias', {
+        AliasName: 'alias/dev-email-ses-topic-key',
+      });
     });
 
-    test('KMS key has SNS and SQS service policies', () => {
+    test('KMS key has SNS, SES, and SQS service policies', () => {
       const stack = makeStack(DEV_CONFIG, 'DevSESStack');
       const template = Template.fromStack(stack);
 
@@ -300,6 +304,27 @@ describe('SESStack', () => {
                 Service: 'sns.amazonaws.com',
               },
             }),
+          ]),
+        },
+      });
+
+      template.hasResourceProperties('AWS::KMS::Key', {
+        KeyPolicy: {
+          Statement: Match.arrayWith([
+            Match.objectLike({
+              Sid: 'AllowSESToUseKey',
+              Effect: 'Allow',
+              Principal: {
+                Service: 'ses.amazonaws.com',
+              },
+            }),
+          ]),
+        },
+      });
+
+      template.hasResourceProperties('AWS::KMS::Key', {
+        KeyPolicy: {
+          Statement: Match.arrayWith([
             Match.objectLike({
               Sid: 'AllowSQSToDecrypt',
               Effect: 'Allow',

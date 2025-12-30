@@ -85,13 +85,14 @@ export class SESIdentityConstruct extends Construct {
       dkimSigning: config.ses.enableDkim,
     });
 
-    // Create DKIM CNAME records in the parent hosted zone for the subdomain identity.
+    // Create DKIM CNAME records using the full token name from SES to avoid duplicate zone suffixes.
     this.emailIdentity.dkimRecords.forEach((record, index) => {
-      new route53.CnameRecord(this, `DkimRecord${index + 1}`, {
-        zone: hostedZone,
-        recordName: record.name,
-        domainName: record.value,
-        ttl: cdk.Duration.minutes(5),
+      new route53.CfnRecordSet(this, `DkimRecord${index + 1}`, {
+        hostedZoneId: hostedZone.hostedZoneId,
+        name: record.name,
+        type: 'CNAME',
+        resourceRecords: [record.value],
+        ttl: cdk.Duration.minutes(5).toSeconds().toString(),
         comment: 'DKIM record for SES Easy DKIM',
       });
     });

@@ -1,0 +1,224 @@
+{
+    "ResourceRecordSets": [
+        {
+            "Name": "ponton.io.",
+            "Type": "A",
+            "AliasTarget": {
+                "HostedZoneId": "Z2FDTNDATAQYW2",
+                "DNSName": "d17seowjc5x4av.cloudfront.net.",
+                "EvaluateTargetHealth": false
+            }
+        },
+        {
+            "Name": "ponton.io.",
+            "Type": "MX",
+            "TTL": 3600,
+            "ResourceRecords": [
+                {
+                    "Value": "10 mx2.mythic-beasts.com."
+                },
+                {
+                    "Value": "10 mx1.mythic-beasts.com."
+                }
+            ]
+        },
+        {
+            "Name": "ponton.io.",
+            "Type": "NS",
+            "TTL": 172800,
+            "ResourceRecords": [
+                {
+                    "Value": "ns-1282.awsdns-32.org."
+                },
+                {
+                    "Value": "ns-160.awsdns-20.com."
+                },
+                {
+                    "Value": "ns-990.awsdns-59.net."
+                },
+                {
+                    "Value": "ns-1879.awsdns-42.co.uk."
+                }
+            ]
+        },
+        {
+            "Name": "ponton.io.",
+            "Type": "SOA",
+            "TTL": 900,
+            "ResourceRecords": [
+                {
+                    "Value": "ns-1282.awsdns-32.org. awsdns-hostmaster.amazon.com. 1 7200 900 1209600 86400"
+                }
+            ]
+        },
+        {
+            "Name": "ponton.io.",
+            "Type": "TXT",
+            "TTL": 3600,
+            "ResourceRecords": [
+                {
+                    "Value": "\"mythic-beasts-k3._domainkeys CNAME k3.ponton.io.dkim.mythic-beasts.com.\""
+                },
+                {
+                    "Value": "\"mythic-beasts-k2._domainkeys CNAME k2.ponton.io.dkim.mythic-beasts.com.\""
+                },
+                {
+                    "Value": "\"mythic-beasts-k1._domainkeys CNAME k1.ponton.io.dkim.mythic-beasts.com.\""
+                },
+                {
+                    "Value": "\"v=spf1 include:_spf.mythic-beasts.com include:_spf.mlsend.com ~all\""
+                },
+                {
+                    "Value": "\"mailerlite-domain-verification=a0c2565991ac3aece873ac3fcab19f5e39f75b0a\""
+                }
+            ]
+        },
+        {
+            "Name": "_38f48037b068bc460c3e7d98a153d5c9.ponton.io.",
+            "Type": "CNAME",
+            "TTL": 500,
+            "ResourceRecords": [
+                {
+                    "Value": "_ee0c8a72a20940fc04c53e1b863be00c.xlfgrmvvlj.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "litesrv._domainkey.ponton.io.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "litesrv._domainkey.mlsend.com"
+                }
+            ]
+        },
+        {
+            "Name": "cdn.ponton.io.",
+            "Type": "A",
+            "AliasTarget": {
+                "HostedZoneId": "Z2FDTNDATAQYW2",
+                "DNSName": "d1shatlevptbtl.cloudfront.net.",
+                "EvaluateTargetHealth": false
+            }
+        },
+        {
+            "Name": "cdn.ponton.io.",
+            "Type": "AAAA",
+            "AliasTarget": {
+                "HostedZoneId": "Z2FDTNDATAQYW2",
+                "DNSName": "d1shatlevptbtl.cloudfront.net.",
+                "EvaluateTargetHealth": false
+            }
+        },
+        {
+            "Name": "_757d13c03ad1a0af59faad9091819283.cdn.ponton.io.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_139f797a2140770be283f14f411d8a94.jkddzztszm.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "email.ponton.io.",
+            "Type": "TXT",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "\"v=spf1 include:amazonses.com -all\""
+                }
+            ]
+        },
+        {
+            "Name": "_dmarc.email.ponton.io.",
+            "Type": "TXT",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "\"v=DMARC1; p=none; rua=mailto:dmarc-reports@email.ponton.io\""
+                }
+            ]
+        },
+        {
+            "Name": "mgvbpuho2hw6uvbqjdgfcttkmtplqdh5._domainkey.email.ponton.io.",
+            "Type": "CNAME",
+            "TTL": 1800,
+            "ResourceRecords": [
+                {
+                    "Value": "mgvbpuho2hw6uvbqjdgfcttkmtplqdh5.dkim.amazonses.com"
+                }
+            ]
+        },
+        {
+            "Name": "x3ud53c7slrjb4kmfrhfrtoqqb6y64o6._domainkey.email.ponton.io.",
+            "Type": "CNAME",
+            "TTL": 1800,
+            "ResourceRecords": [
+                {
+                    "Value": "x3ud53c7slrjb4kmfrhfrtoqqb6y64o6.dkim.amazonses.com"
+                }
+            ]
+        },
+        {
+            "Name": "zudxork5knfpinzkcwe2rtawqwvy2mc4._domainkey.email.ponton.io.",
+            "Type": "CNAME",
+            "TTL": 1800,
+            "ResourceRecords": [
+                {
+                    "Value": "zudxork5knfpinzkcwe2rtawqwvy2mc4.dkim.amazonses.com"
+                }
+            ]
+        },
+        {
+            "Name": "api-dev.email.ponton.io.",
+            "Type": "A",
+            "AliasTarget": {
+                "HostedZoneId": "ZJ5UAJN8Y3Z2Q",
+                "DNSName": "d-2nq5wj0ovb.execute-api.eu-west-2.amazonaws.com.",
+                "EvaluateTargetHealth": false
+            }
+        },
+        {
+            "Name": "_d1f32b6cdf6b131dee76959746c7facf.api-dev.email.ponton.io.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_8ede8797ac1b0f1694d4d7bcd2753950.jkddzztszm.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "bounce.email.ponton.io.",
+            "Type": "MX",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "10 feedback-smtp.eu-west-2.amazonses.com"
+                }
+            ]
+        },
+        {
+            "Name": "bounce.email.ponton.io.",
+            "Type": "TXT",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "\"v=spf1 include:amazonses.com -all\""
+                }
+            ]
+        },
+        {
+            "Name": "www.ponton.io.",
+            "Type": "CNAME",
+            "TTL": 500,
+            "ResourceRecords": [
+                {
+                    "Value": "d17seowjc5x4av.cloudfront.net"
+                }
+            ]
+        }
+    ]
+}

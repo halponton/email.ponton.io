@@ -26,7 +26,7 @@ export interface SESEventDestinationProps {
  * 1. SNS Topic (SES publishes events here)
  * 2. SQS Queue (subscribes to SNS, buffers events for Lambda)
  * 3. Dead Letter Queue (DLQ) for failed event processing
- * 4. Dedicated KMS key for encryption
+ * 4. Dedicated KMS keys for SNS and SQS encryption
  * 5. SES Event Destination (configures which events to publish)
  *
  * Event Flow:
@@ -36,7 +36,7 @@ export interface SESEventDestinationProps {
  *
  * Security Architecture:
  * - SNS topic restricted to SES publisher only (resource policy)
- * - SQS encryption with dedicated CMK (separate from DynamoDB key)
+ * - SNS and SQS CMK encryption in all environments
  * - SNS message signature verification performed in Lambda using SNS envelope
  * - Least privilege IAM: Lambda gets queue read/delete only
  *
@@ -81,6 +81,9 @@ export class SESEventDestinationConstruct extends Construct {
   /** KMS encryption key for SQS */
   public readonly encryptionKey: kms.Key;
 
+  /** KMS encryption key for SNS */
+  public readonly topicEncryptionKey: kms.Key;
+
   constructor(scope: Construct, id: string, props: SESEventDestinationProps) {
     super(scope, id);
 
@@ -89,7 +92,7 @@ export class SESEventDestinationConstruct extends Construct {
     const region = cdk.Stack.of(this).region;
 
     /**
-     * Dedicated KMS Key for SES Event Encryption
+     * Dedicated KMS Key for SQS Event Encryption
      *
      * Separate from DynamoDB encryption key per security best practices:
      * - Least privilege: SQS Lambda processor doesn't need DynamoDB key access
@@ -97,38 +100,17 @@ export class SESEventDestinationConstruct extends Construct {
      * - Independent rotation: Can rotate SES event key without affecting DynamoDB
      *
      * Key policy:
-     * - SNS service can use key to encrypt messages
      * - SQS service can use key to decrypt messages
      * - Lambda execution role can decrypt (added when Lambda is created)
      * - Root account retains key management permissions
      */
     this.encryptionKey = new kms.Key(this, 'EncryptionKey', {
       alias: `alias/${envResourceName(config.env, 'email-ses-events-key')}`,
-      description: `Encryption key for SES event queue (${config.env})`,
+      description: `Encryption key for SES event queues (${config.env})`,
       enableKeyRotation: true,
       removalPolicy:
         config.env === 'prod' ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
     });
-
-    // Allow SNS to encrypt messages with this key
-    this.encryptionKey.addToResourcePolicy(
-      new iam.PolicyStatement({
-        sid: 'AllowSNSToEncrypt',
-        effect: iam.Effect.ALLOW,
-        principals: [new iam.ServicePrincipal('sns.amazonaws.com')],
-        actions: [
-          'kms:Decrypt',
-          'kms:GenerateDataKey',
-        ],
-        resources: ['*'],
-        conditions: {
-          StringEquals: {
-            'kms:ViaService': `sns.${region}.amazonaws.com`,
-            'kms:CallerAccount': accountId,
-          },
-        },
-      })
-    );
 
     // Allow SQS to decrypt messages with this key
     this.encryptionKey.addToResourcePolicy(
@@ -145,6 +127,69 @@ export class SESEventDestinationConstruct extends Construct {
           StringEquals: {
             'kms:ViaService': `sqs.${region}.amazonaws.com`,
             'kms:CallerAccount': accountId,
+          },
+        },
+      })
+    );
+
+    /**
+     * Dedicated KMS Key for SNS Event Encryption
+     *
+     * Separate from the SQS key to avoid dependency cycles with SNS → SQS subscriptions.
+     */
+    this.topicEncryptionKey = new kms.Key(this, 'TopicEncryptionKey', {
+      alias: `alias/${envResourceName(config.env, 'email-ses-topic-key')}`,
+      description: `Encryption key for SES event topic (${config.env})`,
+      enableKeyRotation: true,
+      removalPolicy:
+        config.env === 'prod' ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
+    });
+
+    // Allow SNS to encrypt messages with this key
+    this.topicEncryptionKey.addToResourcePolicy(
+      new iam.PolicyStatement({
+        sid: 'AllowSNSToEncrypt',
+        effect: iam.Effect.ALLOW,
+        principals: [new iam.ServicePrincipal('sns.amazonaws.com')],
+        actions: [
+          'kms:Encrypt',
+          'kms:Decrypt',
+          'kms:ReEncrypt*',
+          'kms:GenerateDataKey*',
+          'kms:DescribeKey',
+        ],
+        resources: ['*'],
+        conditions: {
+          StringEqualsIfExists: {
+            'kms:ViaService': `sns.${region}.amazonaws.com`,
+          },
+        },
+      })
+    );
+    this.topicEncryptionKey.addToResourcePolicy(
+      new iam.PolicyStatement({
+        sid: 'AllowSNSToCreateGrant',
+        effect: iam.Effect.ALLOW,
+        principals: [new iam.ServicePrincipal('sns.amazonaws.com')],
+        actions: ['kms:CreateGrant'],
+        resources: ['*'],
+        conditions: {
+          StringEqualsIfExists: {
+            'kms:ViaService': `sns.${region}.amazonaws.com`,
+          },
+        },
+      })
+    );
+    this.topicEncryptionKey.addToResourcePolicy(
+      new iam.PolicyStatement({
+        sid: 'AllowSESToUseKey',
+        effect: iam.Effect.ALLOW,
+        principals: [new iam.ServicePrincipal('ses.amazonaws.com')],
+        actions: ['kms:Decrypt', 'kms:GenerateDataKey*'],
+        resources: ['*'],
+        conditions: {
+          StringEqualsIfExists: {
+            'kms:ViaService': `sns.${region}.amazonaws.com`,
           },
         },
       })
@@ -224,7 +269,7 @@ export class SESEventDestinationConstruct extends Construct {
      * Topic policy restrictions:
      * - Only SES service can publish
      * - Only from this AWS account
-     * - Only from this region
+     * - If SourceArn is present, restrict to configuration set or identity
      *
      * Security rationale:
      * - Prevents unauthorized event injection
@@ -240,11 +285,11 @@ export class SESEventDestinationConstruct extends Construct {
     this.topic = new sns.Topic(this, 'Topic', {
       topicName: envResourceName(config.env, 'email-ses-events'),
       displayName: `SES Events for email.ponton.io (${config.env})`,
-      masterKey: this.encryptionKey,
+      masterKey: this.topicEncryptionKey,
     });
 
     // Restrict SNS topic to SES publisher only
-    this.topic.addToResourcePolicy(
+    const topicPolicyResult = this.topic.addToResourcePolicy(
       new iam.PolicyStatement({
         sid: 'AllowSESToPublish',
         effect: iam.Effect.ALLOW,
@@ -252,9 +297,14 @@ export class SESEventDestinationConstruct extends Construct {
         actions: ['SNS:Publish'],
         resources: [this.topic.topicArn],
         conditions: {
-          StringEquals: {
+          StringEqualsIfExists: {
             'aws:SourceAccount': accountId,
-            'aws:SourceArn': `arn:aws:ses:${region}:${accountId}:configuration-set/${config.ses.configurationSetName}`,
+          },
+          ArnLikeIfExists: {
+            'aws:SourceArn': [
+              `arn:aws:ses:${region}:${accountId}:configuration-set/${config.ses.configurationSetName}*`,
+              `arn:aws:ses:${region}:${accountId}:identity/${config.ses.verifiedDomain}`,
+            ],
           },
         },
       })
@@ -301,7 +351,7 @@ export class SESEventDestinationConstruct extends Construct {
      * - Single destination per configuration set (simple setup)
      * - Environment-scoped name for clarity
      */
-    new ses.CfnConfigurationSetEventDestination(this, 'EventDestination', {
+    const eventDestination = new ses.CfnConfigurationSetEventDestination(this, 'EventDestination', {
       configurationSetName: configurationSet.configurationSetName,
       eventDestination: {
         name: envResourceName(config.env, 'email-ses-sns-destination'),
@@ -312,11 +362,18 @@ export class SESEventDestinationConstruct extends Construct {
         },
       },
     });
+    if (topicPolicyResult.policyDependable) {
+      eventDestination.node.addDependency(topicPolicyResult.policyDependable);
+    }
 
     // Add tags to all resources
     cdk.Tags.of(this.encryptionKey).add('Environment', config.env);
     cdk.Tags.of(this.encryptionKey).add('ManagedBy', 'CDK');
     cdk.Tags.of(this.encryptionKey).add('Project', 'email.ponton.io');
+
+    cdk.Tags.of(this.topicEncryptionKey).add('Environment', config.env);
+    cdk.Tags.of(this.topicEncryptionKey).add('ManagedBy', 'CDK');
+    cdk.Tags.of(this.topicEncryptionKey).add('Project', 'email.ponton.io');
 
     cdk.Tags.of(this.topic).add('Environment', config.env);
     cdk.Tags.of(this.topic).add('ManagedBy', 'CDK');

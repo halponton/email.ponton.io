@@ -125,7 +125,7 @@ export class SESStack extends cdk.Stack {
      * - SNS topic (SES publishes here)
      * - SQS queue (buffers events)
      * - Dead Letter Queue (failed events)
-     * - Dedicated KMS key (encryption)
+     * - Dedicated KMS keys for SNS and SQS encryption
      */
     this.eventDestination = new SESEventDestinationConstruct(
       this,
@@ -252,13 +252,13 @@ export class SESStack extends cdk.Stack {
 
     new cdk.CfnOutput(this, 'EncryptionKeyId', {
       value: this.eventDestination.encryptionKey.keyId,
-      description: 'KMS key ID for SES event encryption',
+      description: 'KMS key ID for SES event queue encryption',
       exportName: envResourceName(config.env, 'SESEventEncryptionKeyId'),
     });
 
     new cdk.CfnOutput(this, 'EncryptionKeyArn', {
       value: this.eventDestination.encryptionKey.keyArn,
-      description: 'KMS key ARN for SES event encryption',
+      description: 'KMS key ARN for SES event queue encryption',
       exportName: envResourceName(config.env, 'SESEventEncryptionKeyArn'),
     });
 

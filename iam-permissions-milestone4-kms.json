@@ -1,0 +1,31 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "KMSKeyManagement",
+      "Effect": "Allow",
+      "Action": [
+        "kms:CreateKey",
+        "kms:CreateAlias",
+        "kms:DeleteAlias",
+        "kms:DescribeKey",
+        "kms:GetKeyPolicy",
+        "kms:PutKeyPolicy",
+        "kms:EnableKeyRotation",
+        "kms:DisableKeyRotation",
+        "kms:GetKeyRotationStatus",
+        "kms:ScheduleKeyDeletion",
+        "kms:CancelKeyDeletion",
+        "kms:TagResource",
+        "kms:UntagResource"
+      ],
+      "Resource": [
+        "arn:aws:kms:eu-west-2:*:key/*",
+        "arn:aws:kms:eu-west-2:*:alias/dev-email-ses-events-key",
+        "arn:aws:kms:eu-west-2:*:alias/prod-email-ses-events-key",
+        "arn:aws:kms:eu-west-2:*:alias/dev-email-ses-topic-key",
+        "arn:aws:kms:eu-west-2:*:alias/prod-email-ses-topic-key"
+      ]
+    }
+  ]
+}

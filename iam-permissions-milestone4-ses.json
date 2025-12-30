@@ -1,0 +1,51 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "SESEmailIdentityManagement",
+      "Effect": "Allow",
+      "Action": [
+        "ses:CreateEmailIdentity",
+        "ses:DeleteEmailIdentity",
+        "ses:GetEmailIdentity",
+        "ses:PutEmailIdentityDkimAttributes",
+        "ses:PutEmailIdentityMailFromAttributes",
+        "ses:TagResource",
+        "ses:UntagResource"
+      ],
+      "Resource": [
+        "arn:aws:ses:eu-west-2:*:identity/*"
+      ]
+    },
+    {
+      "Sid": "SESConfigurationSetManagement",
+      "Effect": "Allow",
+      "Action": [
+        "ses:CreateConfigurationSet",
+        "ses:DeleteConfigurationSet",
+        "ses:DescribeConfigurationSet",
+        "ses:PutConfigurationSetSendingOptions",
+        "ses:PutConfigurationSetTrackingOptions",
+        "ses:PutConfigurationSetReputationOptions"
+      ],
+      "Resource": [
+        "arn:aws:ses:eu-west-2:*:configuration-set/dev-email-ses-config",
+        "arn:aws:ses:eu-west-2:*:configuration-set/prod-email-ses-config"
+      ]
+    },
+    {
+      "Sid": "SESEventDestinationManagement",
+      "Effect": "Allow",
+      "Action": [
+        "ses:CreateConfigurationSetEventDestination",
+        "ses:DeleteConfigurationSetEventDestination",
+        "ses:DescribeConfigurationSetEventDestination",
+        "ses:UpdateConfigurationSetEventDestination"
+      ],
+      "Resource": [
+        "arn:aws:ses:eu-west-2:*:configuration-set/dev-email-ses-config",
+        "arn:aws:ses:eu-west-2:*:configuration-set/prod-email-ses-config"
+      ]
+    }
+  ]
+}

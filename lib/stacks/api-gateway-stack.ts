@@ -164,20 +164,15 @@ export class ApiGatewayStack extends cdk.Stack {
       }
     );
 
-    this.httpStage = new apigatewayv2.HttpStage(
-      this,
-      envResourceName(config.env, 'DefaultStage'),
-      {
-        httpApi: this.httpApi,
-        stageName: '$default',
-        autoDeploy: true,
-        throttle: {
-          rateLimit: config.apiGateway.throttle.rateLimit,
-          burstLimit: config.apiGateway.throttle.burstLimit,
-        },
-        detailedMetricsEnabled: config.enableDetailedMonitoring,
-      }
-    );
+    this.httpStage = this.httpApi.addStage('DefaultStage', {
+      stageName: '$default',
+      autoDeploy: true,
+      throttle: {
+        rateLimit: config.apiGateway.throttle.rateLimit,
+        burstLimit: config.apiGateway.throttle.burstLimit,
+      },
+      detailedMetricsEnabled: config.enableDetailedMonitoring,
+    });
 
     // Create custom domain
     this.customDomain = new apigatewayv2.DomainName(
@@ -276,11 +271,12 @@ export class ApiGatewayStack extends cdk.Stack {
     // policy for one route to be reused for a different route the user shouldn't access.
     // For production optimization, consider enabling caching with per-route identity source
     // (e.g., adding '$context.routeKey' to identitySource).
+    // Use a distinct authorizer name to avoid conflicts when migrating payload formats.
     this.adminAuthorizer = new apigatewayv2Authorizers.HttpLambdaAuthorizer(
-      'AdminAuthorizer',
+      'AdminAuthorizerIam',
       this.adminAuthorizerFunction.function,
       {
-        authorizerName: envResourceName(config.env, 'cognito-authorizer'),
+        authorizerName: envResourceName(config.env, 'cognito-authorizer-iam'),
         responseTypes: [apigatewayv2Authorizers.HttpLambdaResponseType.IAM],
         identitySource: ['$request.header.Authorization'],
         resultsCacheTtl: cdk.Duration.seconds(0), // Disabled for security (MVP)

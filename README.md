@@ -105,6 +105,7 @@ Per **PLATFORM_INVARIANTS.md** section 3:
   - Group membership enforcement (must be in "Administrators")
   - Structured security logging for all authorization attempts (includes failure reason codes)
   - Authorization cache disabled (per-route IAM policy safety)
+  - IAM response format (payload version 1.0) for the admin authorizer
 - API Gateway stage throttling (rate/burst limits per environment)
 - WAF rate-based protection for /admin routes (prod only)
 - Email via SES (admin@email.ponton.io for prod, admin-dev@email.ponton.io for dev)
@@ -121,6 +122,7 @@ Per **PLATFORM_INVARIANTS.md** section 3:
 - API Gateway stage throttling applies to all routes (requests per second).
 - WAF rate-based rule applies to `/admin` paths in prod (per-IP requests over 5 minutes).
 - Tune values in `lib/config/environments.ts`.
+- Throttling is configured on the explicit `$default` stage to allow stage settings.
 
 **Future Milestones:**
 - Milestone 6: Observability and retention jobs

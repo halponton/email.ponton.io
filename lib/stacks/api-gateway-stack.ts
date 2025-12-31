@@ -1,10 +1,12 @@
 import * as cdk from 'aws-cdk-lib';
+import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as apigatewayv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import * as apigatewayv2Authorizers from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
 import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as route53 from 'aws-cdk-lib/aws-route53';
 import * as route53Targets from 'aws-cdk-lib/aws-route53-targets';
 import * as wafv2 from 'aws-cdk-lib/aws-wafv2';
+import * as logs from 'aws-cdk-lib/aws-logs';
 import { Construct } from 'constructs';
 import { EnvironmentConfig, envResourceName } from '../config/environments';
 import { StandardLambdaFunction } from '../constructs/lambda-function';
@@ -88,10 +90,38 @@ export class ApiGatewayStack extends cdk.Stack {
   /** Admin route authorizer */
   public readonly adminAuthorizer: apigatewayv2Authorizers.HttpLambdaAuthorizer;
 
+  /** Access log group for API Gateway */
+  public readonly accessLogGroup: logs.LogGroup;
+
   constructor(scope: Construct, id: string, props: ApiGatewayStackProps) {
     super(scope, id, props);
 
     const { config, certificate, hostedZone, tables, secrets, parameters, cognitoUserPoolId, cognitoClientId } = props;
+
+    /**
+     * CloudWatch Logs group for API Gateway access logs
+     *
+     * Per Milestone 6 Phase 2: Production Hardening
+     * - Structured access logging for all API requests
+     * - 180-day retention per platform invariants
+     * - JSON format for easy parsing and analysis
+     * - PII sanitization: Authorization headers excluded from logs
+     *
+     * Log format includes:
+     * - Request ID, path, method, status
+     * - Latency, integration latency
+     * - Error messages (for 4xx/5xx)
+     * - User agent, source IP
+     * - EXCLUDES: Authorization header (JWT tokens)
+     *
+     * SECURITY: Production logs are retained even after stack deletion to maintain
+     * audit trail. Dev logs are cleaned up on stack deletion to save costs.
+     */
+    this.accessLogGroup = new logs.LogGroup(this, 'AccessLogGroup', {
+      logGroupName: `/aws/apigateway/${envResourceName(config.env, 'email-api')}`,
+      retention: logs.RetentionDays.SIX_MONTHS, // 180 days per platform invariants
+      removalPolicy: config.env === 'prod' ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
+    });
 
     // Create Lambda functions
     this.healthFunction = new StandardLambdaFunction(this, 'HealthFunction', {
@@ -164,6 +194,31 @@ export class ApiGatewayStack extends cdk.Stack {
       }
     );
 
+    /**
+     * API Gateway Stage with Access Logging
+     *
+     * Per Milestone 6 Phase 2: Production Hardening
+     * - JSON-formatted access logs for all requests
+     * - Detailed metrics enabled in prod (disabled in dev for cost)
+     * - Stage-level throttling to prevent abuse
+     *
+     * Access log format (JSON):
+     * - requestId: Unique request identifier
+     * - ip: Source IP address
+     * - requestTime: Request timestamp
+     * - httpMethod: HTTP method
+     * - routeKey: Route matched
+     * - status: HTTP status code
+     * - responseLength: Response size in bytes
+     * - integrationLatency: Lambda execution time
+     * - responseLatency: Total request latency
+     * - integrationStatus: Integration response status
+     * - error.message: Error message for 4xx/5xx (ENHANCED)
+     * - error.messageString: Error type for 4xx/5xx (ENHANCED)
+     * - userAgent: User-Agent header
+     *
+     * SECURITY: Authorization header NOT logged (prevents JWT token exposure)
+     */
     this.httpStage = this.httpApi.addStage('DefaultStage', {
       stageName: '$default',
       autoDeploy: true,
@@ -172,6 +227,26 @@ export class ApiGatewayStack extends cdk.Stack {
         burstLimit: config.apiGateway.throttle.burstLimit,
       },
       detailedMetricsEnabled: config.enableDetailedMonitoring,
+      accessLogSettings: {
+        destination: new apigatewayv2.LogGroupLogDestination(this.accessLogGroup),
+        format: apigateway.AccessLogFormat.custom(
+          JSON.stringify({
+            requestId: '$context.requestId',
+            ip: '$context.identity.sourceIp',
+            requestTime: '$context.requestTime',
+            httpMethod: '$context.httpMethod',
+            routeKey: '$context.routeKey',
+            status: '$context.status',
+            responseLength: '$context.responseLength',
+            integrationLatency: '$context.integrationLatency',
+            responseLatency: '$context.responseLatency',
+            integrationStatus: '$context.integrationStatus',
+            errorMessage: '$context.error.message',
+            errorType: '$context.error.messageString',
+            userAgent: '$context.identity.userAgent',
+          })
+        ),
+      },
     });
 
     // Create custom domain

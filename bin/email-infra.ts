@@ -7,6 +7,7 @@ import { SecretsStack } from '../lib/stacks/secrets-stack';
 import { SESStack } from '../lib/stacks/ses-stack';
 import { CognitoStack } from '../lib/stacks/cognito-stack';
 import { ApiGatewayStack } from '../lib/stacks/api-gateway-stack';
+import { ObservabilityStack } from '../lib/stacks/observability-stack';
 import { getEnvironmentConfig } from '../lib/config/environments';
 
 /**
@@ -53,6 +54,16 @@ import { getEnvironmentConfig } from '../lib/config/environments';
  * - User Pool Domain (OAuth endpoints for admin UI)
  * - Administrators group for admin access
  * - Lambda authorizer for JWT validation with group membership enforcement
+ *
+ * Milestone 6: Observability and Retention Jobs
+ * - CloudWatch Dashboard with comprehensive metrics
+ * - CloudWatch Alarms (DLQ depth, Lambda errors, API 5xx, SES bounce/complaint rates)
+ * - SNS topic for alarm notifications (email subscriptions)
+ * - API Gateway access logging (180-day retention)
+ * - Lambda log retention enforcement (180 days per platform invariants)
+ * - Log sanitization utility (NO PII in logs)
+ * - CloudWatch custom metrics for SES events
+ * - TTL verification for EngagementEvents table (6-month retention)
  */
 
 const app = new cdk.App();
@@ -82,6 +93,7 @@ const secretsStackName = `${config.env}-email-secrets`;
 const sesStackName = `${config.env}-email-ses`;
 const cognitoStackName = `${config.env}-email-cognito`;
 const apiGatewayStackName = `${config.env}-email-api-gateway`;
+const observabilityStackName = `${config.env}-email-observability`;
 
 /**
  * Certificate Stack
@@ -180,6 +192,37 @@ const apiGatewayStack = new ApiGatewayStack(app, apiGatewayStackName, {
   stackName: apiGatewayStackName,
 });
 
+/**
+ * Observability Stack
+ *
+ * Depends on SES Stack and API Gateway Stack for resource references.
+ * Creates CloudWatch dashboard, alarms, and log retention policies.
+ */
+const observabilityStack = new ObservabilityStack(app, observabilityStackName, {
+  env,
+  config,
+  sesEventQueue: sesStack.eventDestination.queue,
+  sesDeadLetterQueue: sesStack.eventDestination.deadLetterQueue,
+  sesEventHandler: sesStack.eventHandler.function,
+  httpApi: apiGatewayStack.httpApi,
+  apiStageName: '$default',
+  lambdaFunctions: [
+    apiGatewayStack.healthFunction.function,
+    apiGatewayStack.notImplementedFunction.function,
+    apiGatewayStack.adminAuthorizerFunction.function,
+    sesStack.eventHandler.function,
+  ],
+  tables: {
+    subscribersTable: dynamodbStack.tables.subscribersTable,
+    campaignsTable: dynamodbStack.tables.campaignsTable,
+    deliveriesTable: dynamodbStack.tables.deliveriesTable,
+    auditEventsTable: dynamodbStack.tables.auditEventsTable,
+    engagementEventsTable: dynamodbStack.tables.engagementEventsTable,
+  },
+  description: `CloudWatch observability for email.ponton.io (${config.env})`,
+  stackName: observabilityStackName,
+});
+
 // Explicit dependencies
 sesStack.addDependency(certificateStack);
 sesStack.addDependency(dynamodbStack);
@@ -188,6 +231,10 @@ apiGatewayStack.addDependency(certificateStack);
 apiGatewayStack.addDependency(dynamodbStack);
 apiGatewayStack.addDependency(secretsStack);
 apiGatewayStack.addDependency(cognitoStack);
+
+observabilityStack.addDependency(sesStack);
+observabilityStack.addDependency(apiGatewayStack);
+observabilityStack.addDependency(dynamodbStack);
 
 // Add global tags
 cdk.Tags.of(app).add('Project', 'email.ponton.io');

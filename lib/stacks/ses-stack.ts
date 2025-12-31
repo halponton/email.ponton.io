@@ -2,6 +2,7 @@ import * as cdk from 'aws-cdk-lib';
 import * as route53 from 'aws-cdk-lib/aws-route53';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import { Construct } from 'constructs';
 import { EnvironmentConfig, envResourceName } from '../config/environments';
 import { SESIdentityConstruct } from '../constructs/ses-identity';
@@ -182,6 +183,20 @@ export class SESStack extends cdk.Stack {
     tables.subscribersTable.grantReadWriteData(this.eventHandler.function);
     tables.auditEventsTable.grantWriteData(this.eventHandler.function);
     tables.engagementEventsTable.grantWriteData(this.eventHandler.function);
+
+    // Grant Lambda permission to publish CloudWatch metrics
+    // Restricts to our custom namespace to prevent metric pollution
+    this.eventHandler.function.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['cloudwatch:PutMetricData'],
+        resources: ['*'], // CloudWatch metrics don't support resource-level permissions
+        conditions: {
+          StringEquals: {
+            'cloudwatch:namespace': `email.ponton.io/${config.env}`,
+          },
+        },
+      })
+    );
 
     // Configure Lambda to process events from SQS queue
     // Event source mapping handles:

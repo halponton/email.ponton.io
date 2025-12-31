@@ -124,6 +124,58 @@ export interface EnvironmentConfig {
      */
     readonly logoutUrls: string[];
   };
+
+  /**
+   * Observability configuration for CloudWatch
+   */
+  readonly observability: {
+    /**
+     * CloudWatch Logs retention period in days
+     * Per platform invariants: 180 days (6 months) for all logs
+     */
+    readonly logRetentionDays: number;
+
+    /**
+     * SNS topic email for alarm notifications
+     * Alarms for DLQ depth, Lambda errors, API 5xx, SES bounce/complaint rates
+     */
+    readonly alarmNotificationEmail: string;
+
+    /**
+     * CloudWatch alarm thresholds
+     */
+    readonly alarms: {
+      /**
+       * Dead Letter Queue message depth threshold
+       * Alert when DLQ has this many messages
+       */
+      readonly dlqDepthThreshold: number;
+
+      /**
+       * Lambda error rate threshold (percentage)
+       * Alert when error rate exceeds this percentage over 5-minute period
+       */
+      readonly lambdaErrorRateThreshold: number;
+
+      /**
+       * API Gateway 5xx error count threshold
+       * Alert when 5xx errors exceed this count in 5-minute period
+       */
+      readonly api5xxThreshold: number;
+
+      /**
+       * SES bounce rate threshold (percentage)
+       * Alert when bounce rate exceeds this percentage
+       */
+      readonly sesBounceRateThreshold: number;
+
+      /**
+       * SES complaint rate threshold (percentage)
+       * Alert when complaint rate exceeds this percentage
+       */
+      readonly sesComplaintRateThreshold: number;
+    };
+  };
 }
 
 /**
@@ -169,6 +221,17 @@ export const DEV_CONFIG: EnvironmentConfig = {
       'https://mailer-dev.ponton.io/auth/logout',
     ],
   },
+  observability: {
+    logRetentionDays: 180, // 6 months per platform invariants
+    alarmNotificationEmail: 'alerts-dev@ponton.io',
+    alarms: {
+      dlqDepthThreshold: 10, // Alert on 10+ messages in DLQ
+      lambdaErrorRateThreshold: 5, // Alert on 5% error rate
+      api5xxThreshold: 10, // Alert on 10+ 5xx errors in 5 minutes
+      sesBounceRateThreshold: 5, // Alert on 5% bounce rate
+      sesComplaintRateThreshold: 0.1, // Alert on 0.1% complaint rate (strict)
+    },
+  },
 };
 
 /**
@@ -207,6 +270,17 @@ export const PROD_CONFIG: EnvironmentConfig = {
   cognito: {
     callbackUrls: ['https://mailer.ponton.io/auth/callback'],
     logoutUrls: ['https://mailer.ponton.io/auth/logout'],
+  },
+  observability: {
+    logRetentionDays: 180, // 6 months per platform invariants
+    alarmNotificationEmail: 'alerts@ponton.io',
+    alarms: {
+      dlqDepthThreshold: 5, // Alert on 5+ messages in DLQ (stricter in prod)
+      lambdaErrorRateThreshold: 2, // Alert on 2% error rate (stricter in prod)
+      api5xxThreshold: 5, // Alert on 5+ 5xx errors in 5 minutes (stricter in prod)
+      sesBounceRateThreshold: 5, // Alert on 5% bounce rate
+      sesComplaintRateThreshold: 0.1, // Alert on 0.1% complaint rate (strict)
+    },
   },
 };
 

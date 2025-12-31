@@ -124,8 +124,44 @@ Per **PLATFORM_INVARIANTS.md** section 3:
 - Tune values in `lib/config/environments.ts`.
 - Throttling is configured on the explicit `$default` stage to allow stage settings.
 
-**Future Milestones:**
-- Milestone 6: Observability and retention jobs
+**Milestone 6: Observability and Retention Jobs** ✅ Complete
+- CloudWatch Dashboard with comprehensive metrics visualization
+  - API Gateway metrics (request count, latency, errors)
+  - Lambda metrics (invocations, errors, duration, throttles)
+  - SES metrics (sends, deliveries, bounces, complaints)
+  - SQS metrics (queue depth, DLQ messages)
+  - DynamoDB metrics (read/write capacity, throttles)
+- CloudWatch Alarms for critical operational issues
+  - DLQ Depth: Alert when SES event processing fails
+  - Lambda Error Rate: Alert when Lambda errors exceed threshold
+  - API 5xx Errors: Alert when API returns server errors
+  - SES Bounce Rate: Alert when email bounce rate is high (>5%)
+  - SES Complaint Rate: Alert when spam complaints exceed 0.1%
+  - System Health: Composite alarm for overall system status
+- SNS Topic for alarm notifications (email subscriptions)
+  - Dev: alerts-dev@ponton.io
+  - Prod: alerts@ponton.io
+  - Requires manual email confirmation after deployment
+- API Gateway Access Logging
+  - JSON-formatted access logs for all API requests
+  - 180-day retention per platform invariants
+  - PII sanitization: Authorization headers excluded
+- Lambda Log Retention Enforcement
+  - All Lambda functions: 180-day retention (6 months)
+  - Automatic enforcement via CDK custom resources
+- Log Sanitization Utility
+  - CRITICAL: NO PII in CloudWatch Logs
+  - Sanitizes email, firstName, tokens, secrets
+  - Only logs ULIDs, action verbs, outcome status
+  - Used throughout all Lambda handlers
+- CloudWatch Custom Metrics
+  - SES event metrics (namespace: email.ponton.io/{env})
+  - Dimensioned by event type (Send, Delivery, Bounce, Complaint, Reject)
+  - Used for enhanced dashboard visibility
+- Retention Verification
+  - DynamoDB TTL enabled on EngagementEvents table (6-month retention)
+  - All log groups configured with 180-day retention
+  - Automatic deletion after retention period
 
 ### API Routes
 
@@ -193,6 +229,9 @@ See `/iam-permissions-milestone4.json` for the policy index and attach all of:
 
 Milestone 5 adds Cognito permissions:
 - `/iam-permissions-milestone5-cognito.json`
+
+Milestone 6 adds CloudWatch observability permissions:
+- `/iam-permissions-milestone6-observability.json`
 
 ## Installation
 
@@ -452,6 +491,161 @@ Failed authorization attempts are logged with reason:
   "timestamp": "2025-01-15T10:30:00.000Z"
 }
 ```
+
+## Observability and Monitoring
+
+### CloudWatch Dashboard
+
+Access the CloudWatch dashboard to view real-time metrics:
+
+```bash
+# Get dashboard URL from stack outputs
+aws cloudformation describe-stacks \
+  --stack-name dev-email-observability \
+  --query 'Stacks[0].Outputs[?OutputKey==`DashboardUrl`].OutputValue' \
+  --output text
+```
+
+The dashboard includes:
+- **System Health**: Alarm status for all critical metrics
+- **API Gateway**: Request rates, latency (p50, p99), 4xx/5xx errors
+- **Lambda Functions**: Invocations, errors, duration, throttles
+- **SES Metrics**: Sends, deliveries, bounces, complaints, bounce/complaint rates
+- **SES Event Processing**: Queue depth, DLQ messages, processing latency
+- **DynamoDB**: Read/write capacity, throttles, errors
+
+### CloudWatch Alarms
+
+All alarms send notifications to the configured SNS topic (email subscription).
+
+**IMPORTANT**: After first deployment, confirm the SNS email subscription:
+1. Check your email inbox for "AWS Notification - Subscription Confirmation"
+2. Click the confirmation link
+3. Future alarms will be delivered to this email
+
+Available alarms:
+- **DLQ Depth**: Alerts when SES event DLQ has messages (indicates processing failures)
+- **Lambda Error Rate**: Alerts when Lambda errors exceed threshold (5% dev, 2% prod)
+- **API 5xx Errors**: Alerts when API returns server errors
+- **SES Bounce Rate**: Alerts when bounce rate >5% (risk of account suspension)
+- **SES Complaint Rate**: Alerts when complaint rate >0.1% (risk of account suspension)
+- **System Health**: Composite alarm (triggers if any critical alarm fires)
+
+### Log Sanitization
+
+**CRITICAL SECURITY REQUIREMENT**: All logs are sanitized to prevent PII exposure.
+
+The log sanitization utility (`lib/utils/log-sanitization.ts`) is used throughout all Lambda handlers:
+
+```typescript
+import { sanitizeSESEvent, createLogContext } from '../utils/log-sanitization';
+
+// Safe logging (NO email addresses)
+console.log('Processing SES event', sanitizeSESEvent(sesEvent));
+
+// Create structured log context
+console.log('Request processed', createLogContext(context.awsRequestId, {
+  action: 'subscribe',
+  status: 'success',
+}));
+```
+
+**NEVER log**:
+- email addresses
+- firstName
+- tokens (confirmToken, unsubscribeToken)
+- secrets
+- Authorization headers
+- emailNormalizedHash
+
+**ONLY log**:
+- ULIDs (subscriberId, campaignId, deliveryId)
+- Action verbs (subscribe, confirm, unsubscribe)
+- Outcome status (success, failure)
+- Timestamps
+- Error messages (sanitized)
+
+### Access Logs
+
+API Gateway access logs are stored in CloudWatch Logs with 180-day retention.
+
+Log format (JSON):
+```json
+{
+  "requestId": "abc-123",
+  "ip": "192.0.2.1",
+  "requestTime": "15/Jan/2025:10:30:00 +0000",
+  "httpMethod": "POST",
+  "routeKey": "POST /v1/subscribe",
+  "status": 200,
+  "responseLength": 456,
+  "integrationLatency": 123,
+  "responseLatency": 145,
+  "protocol": "HTTP/1.1"
+}
+```
+
+**SECURITY**: Authorization headers are NOT logged (prevents JWT token exposure).
+
+### Custom Metrics
+
+SES event metrics are published to CloudWatch:
+- **Namespace**: `email.ponton.io/{env}` (e.g., `email.ponton.io/dev`)
+- **Metric Name**: `SESEvents`
+- **Dimensions**: `EventType` (Send, Delivery, Bounce, Complaint, Reject)
+- **Unit**: Count
+
+Use CloudWatch Logs Insights to query Lambda logs:
+
+```
+# Find all SES events processed in last hour
+fields @timestamp, @message
+| filter @message like /Processing SES event/
+| sort @timestamp desc
+| limit 100
+```
+
+### Data Retention
+
+Per platform invariants section 11:
+
+**Retained Indefinitely**:
+- Subscriber records (without plaintext email post-unsubscribe)
+- Audit events
+- Campaign metadata
+- Delivery records
+- Aggregated campaign statistics
+
+**Retained for 6 Months (180 days)**:
+- Raw engagement events (clicks, opens, delivery events)
+  - TTL enabled on EngagementEvents DynamoDB table
+  - `expiresAt` attribute set to 180 days from creation
+- Application logs (Lambda logs, API Gateway access logs)
+  - CloudWatch Logs retention: 180 days
+  - Automatic deletion after retention period
+
+### Monitoring Best Practices
+
+1. **Daily Checks**:
+   - Review CloudWatch dashboard for anomalies
+   - Check for any triggered alarms
+   - Verify DLQ is empty
+
+2. **Weekly Review**:
+   - Analyze SES bounce/complaint rates
+   - Review Lambda error logs
+   - Check API latency trends
+
+3. **Monthly Audit**:
+   - Verify log retention policies
+   - Review SNS subscription status
+   - Check for any DynamoDB throttling
+
+4. **Incident Response**:
+   - Check CloudWatch Logs for errors
+   - Review alarm history
+   - Use dashboard to identify affected components
+   - Check DLQ for failed messages
 
 ## Testing
 
@@ -816,9 +1010,17 @@ All Lambda functions have minimal IAM permissions:
 - CloudWatch Logs write access only
 - Additional permissions added per function as needed
 
+### KMS Key Policy Hardening
+
+The DynamoDB CMK includes an optional explicit deny for cross-account access
+(see `lib/constructs/dynamodb-tables.ts`). If you want the stricter posture,
+enable that deny statement in the KMS key policy manually.
+
 ### AWS SDK Usage
 
-Lambda handlers should use AWS SDK v3. The Node.js 20 runtime includes v3, and this repo does not assume v2 is available.
+Handlers prefer AWS SDK v3 where bundled. The SES event handler currently uses the Lambda
+runtime's AWS SDK v2 for DynamoDB/SSM/Secrets to avoid bundling extra clients; if you remove
+v2 from the runtime, add v3 dependencies and update the handler imports.
 
 ## Monitoring and Logs
 
@@ -918,6 +1120,25 @@ The SES event pipeline processes the following events:
 - **REJECT**: SES rejected email (invalid recipient, suppression)
 
 Events flow through: SES → SNS Topic → SQS Queue → Lambda Handler → DynamoDB
+
+**Domain wiring requirement:** The SES event handler imports the domain logic from
+`../ponton.io_email_service/dist`. Build that repo before synth/deploy:
+
+```bash
+cd ../ponton.io_email_service
+npm install
+npx tsc --project tsconfig.json --outDir dist --declaration
+```
+
+**Required SES mail tags** (set when sending):
+- `deliveryId` (ULID)
+- `campaignId` (ULID)
+- `subscriberId` (ULID)
+- `attempt` (1-3, for bounce retries)
+
+**Manual IAM updates required (SES handler):**
+- `secretsmanager:GetSecretValue` on `/{env}/email/email-hash-hmac-secret`
+- `ssm:GetParameter` on `/email/{env}/retention/engagement-ttl-days`
 
 ### Monitoring SES Events
 

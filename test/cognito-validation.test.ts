@@ -47,6 +47,17 @@ describe('CognitoStack Security Validations', () => {
           ],
           logoutUrls: ['https://mailer.ponton.io/auth/logout'],
         },
+        observability: {
+          logRetentionDays: 180,
+          alarmNotificationEmail: 'alerts@ponton.io',
+          alarms: {
+            dlqDepthThreshold: 1,
+            lambdaErrorRateThreshold: 5,
+            api5xxThreshold: 10,
+            sesBounceRateThreshold: 5,
+            sesComplaintRateThreshold: 0.1,
+          },
+        },
       };
 
       expect(() => {
@@ -94,6 +105,17 @@ describe('CognitoStack Security Validations', () => {
             'http://insecure.example.com/auth/callback', // Invalid HTTP
           ],
           logoutUrls: ['https://mailer.ponton.io/auth/logout'],
+        },
+        observability: {
+          logRetentionDays: 180,
+          alarmNotificationEmail: 'alerts@ponton.io',
+          alarms: {
+            dlqDepthThreshold: 1,
+            lambdaErrorRateThreshold: 5,
+            api5xxThreshold: 10,
+            sesBounceRateThreshold: 5,
+            sesComplaintRateThreshold: 0.1,
+          },
         },
       };
 
@@ -144,6 +166,17 @@ describe('CognitoStack Security Validations', () => {
             'http://localhost:3000/auth/logout', // Invalid for prod
           ],
         },
+        observability: {
+          logRetentionDays: 180,
+          alarmNotificationEmail: 'alerts@ponton.io',
+          alarms: {
+            dlqDepthThreshold: 1,
+            lambdaErrorRateThreshold: 5,
+            api5xxThreshold: 10,
+            sesBounceRateThreshold: 5,
+            sesComplaintRateThreshold: 0.1,
+          },
+        },
       };
 
       expect(() => {
@@ -189,6 +222,17 @@ describe('CognitoStack Security Validations', () => {
         cognito: {
           callbackUrls: ['https://mailer.ponton.io/auth/callback'],
           logoutUrls: ['https://mailer.ponton.io/auth/logout'],
+        },
+        observability: {
+          logRetentionDays: 180,
+          alarmNotificationEmail: 'alerts@ponton.io',
+          alarms: {
+            dlqDepthThreshold: 1,
+            lambdaErrorRateThreshold: 5,
+            api5xxThreshold: 10,
+            sesBounceRateThreshold: 5,
+            sesComplaintRateThreshold: 0.1,
+          },
         },
       };
 
@@ -241,6 +285,17 @@ describe('CognitoStack Security Validations', () => {
             'http://localhost:3000/auth/logout',
             'https://mailer-dev.ponton.io/auth/logout',
           ],
+        },
+        observability: {
+          logRetentionDays: 180,
+          alarmNotificationEmail: 'alerts-dev@ponton.io',
+          alarms: {
+            dlqDepthThreshold: 5,
+            lambdaErrorRateThreshold: 10,
+            api5xxThreshold: 50,
+            sesBounceRateThreshold: 10,
+            sesComplaintRateThreshold: 1,
+          },
         },
       };
 

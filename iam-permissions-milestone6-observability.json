@@ -1,0 +1,153 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CloudWatchLogsManagement",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:DeleteLogGroup",
+        "logs:DescribeLogGroups",
+        "logs:ListTagsLogGroup",
+        "logs:PutRetentionPolicy",
+        "logs:DeleteRetentionPolicy",
+        "logs:TagLogGroup",
+        "logs:UntagLogGroup"
+      ],
+      "Resource": [
+        "arn:aws:logs:*:*:log-group:/aws/lambda/*-email-*",
+        "arn:aws:logs:*:*:log-group:/aws/apigateway/*-email-*"
+      ]
+    },
+    {
+      "Sid": "CloudWatchAlarmsManagement",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:PutMetricAlarm",
+        "cloudwatch:DeleteAlarms",
+        "cloudwatch:DescribeAlarms",
+        "cloudwatch:ListTagsForResource",
+        "cloudwatch:TagResource",
+        "cloudwatch:UntagResource",
+        "cloudwatch:PutCompositeAlarm"
+      ],
+      "Resource": [
+        "arn:aws:cloudwatch:*:*:alarm:*-email-*",
+        "arn:aws:cloudwatch:*:*:alarm:*-ses-*",
+        "arn:aws:cloudwatch:*:*:alarm:*-lambda-*",
+        "arn:aws:cloudwatch:*:*:alarm:*-api-*",
+        "arn:aws:cloudwatch:*:*:alarm:*-system-health"
+      ]
+    },
+    {
+      "Sid": "CloudWatchDashboardManagement",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:PutDashboard",
+        "cloudwatch:DeleteDashboards",
+        "cloudwatch:GetDashboard",
+        "cloudwatch:ListDashboards"
+      ],
+      "Resource": [
+        "arn:aws:cloudwatch:*:*:dashboard/*-email-platform"
+      ]
+    },
+    {
+      "Sid": "CloudWatchMetricsRead",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:GetMetricStatistics",
+        "cloudwatch:ListMetrics",
+        "cloudwatch:DescribeAlarmHistory"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "SNSTopicManagement",
+      "Effect": "Allow",
+      "Action": [
+        "sns:CreateTopic",
+        "sns:DeleteTopic",
+        "sns:GetTopicAttributes",
+        "sns:SetTopicAttributes",
+        "sns:Subscribe",
+        "sns:Unsubscribe",
+        "sns:ListSubscriptionsByTopic",
+        "sns:ListTagsForResource",
+        "sns:TagResource",
+        "sns:UntagResource"
+      ],
+      "Resource": [
+        "arn:aws:sns:*:*:*-email-alarms"
+      ]
+    },
+    {
+      "Sid": "SNSTopicPolicyManagement",
+      "Effect": "Allow",
+      "Action": [
+        "sns:GetTopicAttributes",
+        "sns:SetTopicAttributes"
+      ],
+      "Resource": [
+        "arn:aws:sns:*:*:*-email-alarms"
+      ]
+    },
+    {
+      "Sid": "LambdaCloudWatchMetrics",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:PutMetricData"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "cloudwatch:namespace": [
+            "email.ponton.io/dev",
+            "email.ponton.io/prod"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "ApiGatewayLogsRoleAttachment",
+      "Effect": "Allow",
+      "Action": [
+        "apigateway:GET",
+        "apigateway:PATCH",
+        "apigateway:POST",
+        "apigateway:PUT",
+        "apigateway:DELETE"
+      ],
+      "Resource": [
+        "arn:aws:apigateway:*::/apis/*/stages/*",
+        "arn:aws:apigateway:*::/apis/*/stages/*/accesslogsettings"
+      ]
+    },
+    {
+      "Sid": "IAMPassRoleForApiGatewayLogging",
+      "Effect": "Allow",
+      "Action": [
+        "iam:PassRole"
+      ],
+      "Resource": [
+        "arn:aws:iam::*:role/*ApiGatewayLogsRole*"
+      ],
+      "Condition": {
+        "StringLike": {
+          "iam:PassedToService": "apigateway.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid": "DescribeResources",
+      "Effect": "Allow",
+      "Action": [
+        "sqs:GetQueueAttributes",
+        "lambda:GetFunction",
+        "apigateway:GET",
+        "dynamodb:DescribeTable"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

@@ -3,6 +3,7 @@ import {
   APIGatewayAuthorizerResult,
 } from 'aws-lambda';
 import { CognitoJwtVerifier } from 'aws-jwt-verify';
+import { sanitizeForLogging, createLogContext } from '../utils/log-sanitization';
 
 /**
  * Lambda authorizer for admin routes with Cognito JWT validation
@@ -113,10 +114,13 @@ function extractToken(authHeader: string | undefined): TokenExtractionResult {
 
   // Validate header size before processing
   if (authHeader.length > MAX_HEADER_LENGTH) {
-    console.warn('Authorization header exceeds maximum length', {
-      length: authHeader.length,
-      maxLength: MAX_HEADER_LENGTH,
-    });
+    console.warn(
+      'Authorization header exceeds maximum length',
+      sanitizeForLogging({
+        lengthExceeded: true,
+        maxLength: MAX_HEADER_LENGTH,
+      })
+    );
     return {
       errorCode: 'AUTH_HEADER_TOO_LARGE',
       reason: 'Authorization header exceeds maximum length',
@@ -136,10 +140,13 @@ function extractToken(authHeader: string | undefined): TokenExtractionResult {
 
   // Validate token size
   if (token.length > MAX_TOKEN_LENGTH) {
-    console.warn('Token exceeds maximum length', {
-      length: token.length,
-      maxLength: MAX_TOKEN_LENGTH,
-    });
+    console.warn(
+      'Token exceeds maximum length',
+      sanitizeForLogging({
+        lengthExceeded: true,
+        maxLength: MAX_TOKEN_LENGTH,
+      })
+    );
     return {
       errorCode: 'AUTH_TOKEN_TOO_LARGE',
       reason: 'Token exceeds maximum length',
